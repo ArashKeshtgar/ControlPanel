@@ -1,7 +1,9 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto, RefreshDto } from './dto/login.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { JwtPayload } from './jwt.strategy';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -16,5 +18,13 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(204)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async logout(@Req() req: { user: JwtPayload }) {
+    await this.auth.logout(req.user.sub);
   }
 }

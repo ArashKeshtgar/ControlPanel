@@ -3,4 +3,5 @@ export interface User {
   username: string;
   passwordHash: string;
   role: 'Admin' | 'Viewer';
+  tokenVersion: number;
 }

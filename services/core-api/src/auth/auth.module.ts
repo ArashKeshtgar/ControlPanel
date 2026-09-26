@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
+import { requireSecret } from './jwt-config';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -14,7 +15,7 @@ import { UsersModule } from '../users/users.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'dev-only-change-me'),
+        secret: requireSecret(config, 'JWT_SECRET'),
       }),
       inject: [ConfigService],
     }),

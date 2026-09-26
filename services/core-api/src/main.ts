@@ -1,11 +1,14 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { validateJwtSecrets } from './auth/jwt-config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  validateJwtSecrets(app.get(ConfigService));
 
   app.enableCors({ origin: 'http://localhost:4100' });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
