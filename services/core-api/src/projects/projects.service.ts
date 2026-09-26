@@ -122,25 +122,47 @@ export class ProjectsService {
   }
 
   private async fetchStatus(project: ProjectRegistryEntry): Promise<AdapterStatus> {
-    // Re-checked at fetch time too: rows written before this check existed,
-    // or edited directly in SQL, must not bypass the allowlist.
-    const problem = checkAdapterBaseUrl(project.adapterBaseUrl, this.allowedHosts);
-    if (problem) return { healthy: false, error: `Adapter URL rejected: ${problem}` };
-
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch(`${new URL(project.adapterBaseUrl).origin}/status`, {
-        signal: controller.signal,
-        redirect: 'error',
-      });
-      clearTimeout(timeout);
-
+      const response = await this.requestAdapter(project, '/status');
       if (!response.ok) return { healthy: false, error: `Adapter returned HTTP ${response.status}` };
       return (await response.json()) as AdapterStatus;
     } catch (err) {
       this.logger.warn(`Adapter unreachable for ${project.key}: ${(err as Error).message}`);
-      return { healthy: false, error: 'Adapter unreachable.' };
+      return { healthy: false, error: (err as Error).message.startsWith('Adapter URL rejected') ? (err as Error).message : 'Adapter unreachable.' };
+    }
+  }
+
+  // Read-only extras an adapter may expose besides /status (e.g.
+  // ledgerdash-adapter's /insights/*), for the assistant. Only paths on this
+  // list can be requested, and they go through the same allowlist and
+  // timeout as /status.
+  static readonly ADAPTER_READ_PATHS = new Set(['/insights/followups', '/insights/funnel', '/insights/gaps']);
+
+  async fetchAdapterJson(key: string, path: string): Promise<unknown> {
+    if (!ProjectsService.ADAPTER_READ_PATHS.has(path)) throw new BadRequestException(`Path not allowed: ${path}`);
+    const project = (await this.listRegistry()).find((p) => p.key === key);
+    if (!project) throw new NotFoundException(`Unknown project: ${key}`);
+    const response = await this.requestAdapter(project, path);
+    if (!response.ok) throw new Error(`Adapter returned HTTP ${response.status}`);
+    return response.json();
+  }
+
+  // Re-checks the allowlist at fetch time too: rows written before the check
+  // existed, or edited directly in SQL, must not bypass it. Redirects are
+  // refused so an allowed host can't bounce the request elsewhere.
+  private async requestAdapter(project: ProjectRegistryEntry, path: string): Promise<Response> {
+    const problem = checkAdapterBaseUrl(project.adapterBaseUrl, this.allowedHosts);
+    if (problem) throw new Error(`Adapter URL rejected: ${problem}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      return await fetch(`${new URL(project.adapterBaseUrl).origin}${path}`, {
+        signal: controller.signal,
+        redirect: 'error',
+      });
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

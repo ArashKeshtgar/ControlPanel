@@ -11,6 +11,7 @@ SQLCMD=/opt/mssql-tools18/bin/sqlcmd
 ADAPTER_HOST="${ADAPTER_HOST:-localhost}"
 WUTILITY_ADAPTER="${WUTILITY_ADAPTER:-wutility-adapter:4001}"
 HISPLUS_ADAPTER="${HISPLUS_ADAPTER:-hisplus-adapter:4002}"
+LEDGERDASH_ADAPTER="${LEDGERDASH_ADAPTER:-ledgerdash-adapter:4006}"
 
 for script in /db/*.sql; do
   echo "Running $(basename "$script")"
@@ -18,6 +19,7 @@ for script in /db/*.sql; do
     -v DB_PASSWORD="$DB_PASSWORD" \
     -v ADAPTER_HOST="$ADAPTER_HOST" \
     -v WUTILITY_ADAPTER="$WUTILITY_ADAPTER" \
-    -v HISPLUS_ADAPTER="$HISPLUS_ADAPTER"
+    -v HISPLUS_ADAPTER="$HISPLUS_ADAPTER" \
+    -v LEDGERDASH_ADAPTER="$LEDGERDASH_ADAPTER"
 done
 echo "Database initialization complete."

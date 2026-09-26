@@ -1,0 +1,34 @@
+<section class="assistant">
+  <div class="assistant-head">
+    <h2>Ask the portfolio</h2>
+    <span class="hint">Answers come from live adapter data. Read-only.</span>
+  </div>
+
+  <div class="ask-row">
+    <textarea
+      rows="2"
+      dir="auto"
+      maxlength="1000"
+      placeholder="e.g. Which applications need a follow-up?"
+      [(ngModel)]="question"
+      (keydown)="onKeydown($event)"
+      [disabled]="asking"
+    ></textarea>
+    <button (click)="ask()" [disabled]="asking || question.trim().length < 3">
+      {{ asking ? 'Thinking…' : 'Ask' }}
+    </button>
+  </div>
+
+  <div class="examples" *ngIf="!result && !asking">
+    <button class="chip" *ngFor="let e of examples" (click)="ask(e)">{{ e }}</button>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="answer" *ngIf="result && !asking">
+    <p class="answer-text" dir="auto">{{ result.answer }}</p>
+    <div class="meta" *ngIf="result.toolsUsed.length">
+      Looked at: <span class="tool" *ngFor="let t of result.toolsUsed">{{ t }}</span>
+    </div>
+  </div>
+</section>

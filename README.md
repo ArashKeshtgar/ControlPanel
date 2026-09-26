@@ -1,6 +1,6 @@
 # Control Panel
 
-A central status portal for the project portfolio: every existing project is fronted by its own small adapter microservice, and `core-api` aggregates their live status into one dashboard.
+A central status portal for the project portfolio: every existing project is fronted by its own small adapter microservice, and `core-api` aggregates their live status into one dashboard. An optional AI assistant answers questions about that live data ("which applications need a follow-up?") through read-only tools.
 
 ## Architecture
 
@@ -11,12 +11,13 @@ Angular frontend (4100)
    core-api (4000)  ── NestJS, TypeScript, SQL Server
         │  auth (login/refresh), RBAC guard, project registry
         │  GET /projects → fetches /status from every adapter in parallel
+        │  POST /assistant/ask → Claude, with read-only tools over the same data
         ▼
-┌───────────────┬───────────────┬─────────────────────────┐
-│ wutility-      │ hisplus-      │ ... one adapter per      │
-│ adapter (4001) │ adapter (4002)│ remaining project        │
-│ proxy pattern  │ direct-DB-read│ (see "Adding an adapter")│
-└───────────────┴───────────────┴─────────────────────────┘
+┌───────────────┬───────────────┬────────────────┬──────────────────┐
+│ wutility-      │ hisplus-      │ ledgerdash-     │ ... one adapter  │
+│ adapter (4001) │ adapter (4002)│ adapter (4006)  │ per remaining    │
+│ proxy pattern  │ direct-DB-read│ DB-read (views) │ project          │
+└───────────────┴───────────────┴────────────────┴──────────────────┘
 ```
 
 Every adapter exposes exactly one contract — `GET /status` returning:
@@ -30,7 +31,7 @@ Every adapter exposes exactly one contract — `GET /status` returning:
 ## Two adapter patterns (both built, both proven)
 
 1. **Proxy pattern** (`wutility-adapter`) — for a project that already has its own HTTP API (wUtility Web, DbaOpsConsole, LedgerDashboard, mern-animation-project all qualify). The adapter just calls that real API and normalizes the response.
-2. **Direct-DB-read pattern** (`hisplus-adapter`) — for a project with no API at all (HIS+, DrOffice are plain WinForms desktop apps). The adapter connects read-only to the project's SQL Server database and computes real metrics from the same tables the desktop app writes to.
+2. **Direct-DB-read pattern** (`hisplus-adapter`, `ledgerdash-adapter`) — for a project whose data lives in SQL Server. `hisplus-adapter` reads HIS+'s tables (a WinForms app with no API). `ledgerdash-adapter` reads LedgerDashboard's database only through its reporting views (`db/04-views.sql` in that repo) with a login that can't see the tables at all, so its numbers match the dashboard's own UI exactly. Besides `/status` it serves read-only `/insights/followups`, `/insights/funnel` and `/insights/gaps` for the assistant.
 
 `JobSearch/engine` and `English Engine` don't have a SQL database either — their adapter would read the ledger CSV / lesson output folder directly, a third minor variant of pattern 2.
 
@@ -42,6 +43,24 @@ Every adapter exposes exactly one contract — `GET /status` returning:
 4. Point the project's row at it from the **Manage ports** page. The registry is already seeded with all 9 projects; the ones without an adapter yet show "Offline". If the adapter runs on a new host name, add that host to `ADAPTER_ALLOWED_HOSTS` first (see Security).
 
 No changes to `core-api` or the frontend are ever needed to add a project — that's the aggregation pattern doing its job.
+
+## AI assistant
+
+The dashboard's **Ask the portfolio** box sends a question to `POST /assistant/ask` (any signed-in user). `core-api` runs a tool-use loop with Claude (`claude-opus-5`) over three read-only tools:
+
+| Tool | Reads |
+|---|---|
+| `list_projects` | every project's live `/status` (same data as the dashboard) |
+| `get_project_status` | one project's status and metrics |
+| `get_job_search_insight` | `followups`, `funnel` or `gaps` from `ledgerdash-adapter`'s `/insights/*` |
+
+Design choices:
+
+- **Read-only by construction.** No tool writes, runs SQL or takes a URL; insight paths come from a fixed list and go through the same SSRF allowlist as `/status`. Asked to change something, it says where to do it instead.
+- **Tool data is treated as data.** The system prompt says so, and there is nothing a prompt-injected result could make it do.
+- **Bounded:** at most 6 model turns per question, 20 questions per user per hour, parallel tool calls answered together, `refusal` / `max_tokens` handled explicitly, server-side `fallbacks: "default"` for declined requests.
+- **Optional.** Without `ANTHROPIC_API_KEY` the rest of `core-api` runs normally and the endpoint answers 503.
+- Answers come back in the question's language, as plain text (never rendered as HTML).
 
 ## Auth
 
@@ -101,7 +120,7 @@ Against a local SQL Server, from the `db/` folder (Windows `sqlcmd`, integrated 
 sqlcmd -S . -E -b -i 01-databases.sql
 sqlcmd -S . -E -b -i 02-service-login.sql -v DB_PASSWORD="<password for controlpanel_svc>"
 sqlcmd -S . -E -b -i 03-controlpanel-schema.sql
-sqlcmd -S . -E -b -i 04-controlpanel-seed.sql -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002
+sqlcmd -S . -E -b -i 04-controlpanel-seed.sql -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002 LEDGERDASH_ADAPTER=localhost:4006
 sqlcmd -S . -E -b -i 05-hisplus-demo.sql
 ```
 
@@ -111,10 +130,12 @@ Then copy `services/core-api/.env.example` to `services/core-api/.env`, fill it 
 npm install                                   # once, from the repo root (npm workspaces)
 cd services/core-api && npm run build && node --env-file=.env dist/scripts/seed-users.js
 
-# each in its own terminal (the adapters need DB_PASSWORD / WUTILITY_API_KEY set)
-cd services/core-api && npm run start:dev                   # :4000
-cd services/adapters/wutility-adapter && npm run start:dev  # :4001
-cd services/adapters/hisplus-adapter && npm run start:dev   # :4002
+# each in its own terminal (the adapters need DB_PASSWORD / WUTILITY_API_KEY set;
+# ledgerdash-adapter's DB_PASSWORD is LedgerDashboard's ledger_reader password)
+cd services/core-api && npm run start:dev                     # :4000
+cd services/adapters/wutility-adapter && npm run start:dev    # :4001
+cd services/adapters/hisplus-adapter && npm run start:dev     # :4002
+cd services/adapters/ledgerdash-adapter && npm run start:dev  # :4006
 cd frontend && npx ng serve --port 4100                     # :4100
 ```
 
@@ -122,13 +143,14 @@ cd frontend && npx ng serve --port 4100                     # :4100
 
 | Where | Run | Covers |
 |---|---|---|
-| `services/core-api` | `npm test` (Jest) | Login, token types and secrets, refresh, logout revocation, RBAC guard, secret validation, SSRF allowlist |
+| `services/core-api` | `npm test` (Jest) | Login, token types and secrets, refresh, logout revocation, RBAC guard, secret validation, SSRF allowlist; the assistant's tool loop with a scripted fake Claude client (parallel tools, error results, refusal, turn cap, rate limit, not-configured 503) |
 | `services/adapters/*` | `npm test` (Jest) | Each adapter's `/status` over real HTTP with the upstream API or database faked: success, upstream errors, timeouts, empty tables |
-| `frontend` | `npm run test:ci` (Karma, headless Chrome) | Token storage, transparent refresh-and-retry, one shared refresh, session end on a rejected refresh, server-side logout, admin route guard |
+| `frontend` | `npm run test:ci` (Karma, headless Chrome) | Token storage, transparent refresh-and-retry, one shared refresh, session end on a rejected refresh, server-side logout, admin route guard, the assistant panel |
 
-CI runs all of them, plus the production builds and all four Docker images, on every push.
+CI runs all of them, plus the production builds and all five Docker images, on every push.
 
 ## What's deliberately not built (yet)
 
 - Message-queue-based async status push (RabbitMQ) — for a status dashboard, synchronous REST composition with a short per-adapter timeout is simpler and equally correct; there's no async workflow here that would benefit from a queue.
-- The remaining 7 adapters — same two patterns, not yet copy-pasted for the other 7 projects.
+- The remaining 6 adapters — same two patterns, not yet built for the other 6 projects.
+- Status history and a daily AI digest — the assistant sees live status only; storing snapshots would let it answer "what changed since yesterday?".

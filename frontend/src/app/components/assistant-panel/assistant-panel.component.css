@@ -1,0 +1,54 @@
+.assistant {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.assistant-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+.hint { font-size: 0.75rem; color: var(--ink-soft); }
+
+.ask-row { display: flex; gap: 8px; align-items: stretch; }
+.ask-row textarea {
+  flex: 1;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  unicode-bidi: plaintext;
+}
+
+.examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.answer { border-top: 1px dashed var(--line); padding-top: 10px; }
+.answer-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  unicode-bidi: plaintext;
+}
+.meta { margin-top: 8px; font-size: 0.72rem; color: var(--ink-soft); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tool { font-family: ui-monospace, monospace; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+
+@media (max-width: 600px) {
+  .ask-row { flex-direction: column; }
+}

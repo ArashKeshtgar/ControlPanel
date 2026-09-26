@@ -10,6 +10,7 @@ export const DEFAULT_ALLOWED_ADAPTER_HOSTS = [
   'host.docker.internal',
   'wutility-adapter',
   'hisplus-adapter',
+  'ledgerdash-adapter',
 ];
 
 export function parseAllowedHosts(raw: string | undefined): string[] {

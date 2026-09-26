@@ -7,8 +7,8 @@
 -- are host or host:port only — no scheme — because Windows sqlcmd rejects
 -- variable values containing '//'.
 --   ADAPTER_HOST                       host for the not-yet-built adapters
---   WUTILITY_ADAPTER, HISPLUS_ADAPTER  host:port of the two real adapters
--- Local:  -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002
+--   WUTILITY_ADAPTER, HISPLUS_ADAPTER, LEDGERDASH_ADAPTER  host:port of the real adapters
+-- Local:  -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002 LEDGERDASH_ADAPTER=localhost:4006
 -- Docker: set by db/init.sh to the compose service names.
 USE ControlPanelDb;
 GO
@@ -20,7 +20,7 @@ USING (VALUES
     (N'droffice',       N'DrOffice',              N'Clinical', N'http://$(ADAPTER_HOST):4003'),
     (N'smartledger',    N'SmartLedgerAI',         N'Career',   N'http://$(ADAPTER_HOST):4004'),
     (N'jobsearch',      N'JobSearch/engine',      N'Career',   N'http://$(ADAPTER_HOST):4005'),
-    (N'ledgerdash',     N'LedgerDashboard',       N'Career',   N'http://$(ADAPTER_HOST):4006'),
+    (N'ledgerdash',     N'LedgerDashboard',       N'Career',   N'http://$(LEDGERDASH_ADAPTER)'),
     (N'english-engine', N'English Engine',        N'Career',   N'http://$(ADAPTER_HOST):4007'),
     (N'dbaops',         N'DbaOpsConsole',         N'Other',    N'http://$(ADAPTER_HOST):4008'),
     (N'mern',           N'mern-animation-project', N'Other',   N'http://$(ADAPTER_HOST):4009')

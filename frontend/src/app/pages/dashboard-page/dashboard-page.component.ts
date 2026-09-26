@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { ProjectsService, ProjectWithStatus } from '../../projects.service';
 import { AuthService } from '../../auth/auth.service';
+import { AssistantPanelComponent } from '../../components/assistant-panel/assistant-panel.component';
 
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, AssistantPanelComponent],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.css'
 })

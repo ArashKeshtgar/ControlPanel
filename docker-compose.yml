@@ -38,6 +38,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       WUTILITY_ADAPTER: wutility-adapter:4001
       HISPLUS_ADAPTER: hisplus-adapter:4002
+      LEDGERDASH_ADAPTER: ledgerdash-adapter:4006
     volumes:
       - ./db:/db:ro
     restart: "no"
@@ -69,9 +70,11 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      # Optional: enables the assistant (POST /assistant/ask); without it that endpoint answers 503.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # localhost: the not-yet-built adapters are seeded as localhost:40xx and
       # simply show "unreachable" until they exist.
-      ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter
+      ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter,ledgerdash-adapter
 
   wutility-adapter:
     build: ./services/adapters/wutility-adapter
@@ -80,6 +83,20 @@ services:
     environment:
       WUTILITY_API_BASE: ${WUTILITY_API_BASE:-http://host.docker.internal:5091}
       WUTILITY_API_KEY: ${WUTILITY_API_KEY:?set WUTILITY_API_KEY in .env}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Reads LedgerDashboard's SQL Server database on the host (not the
+  # container SQL Server above) through its read-only reporting views.
+  ledgerdash-adapter:
+    build: ./services/adapters/ledgerdash-adapter
+    ports:
+      - "4006:4006"
+    environment:
+      DB_SERVER: host.docker.internal
+      DB_NAME: LedgerDashboard
+      DB_USER: ledger_reader
+      DB_PASSWORD: ${LEDGER_READER_PASSWORD:?set LEDGER_READER_PASSWORD in .env}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
