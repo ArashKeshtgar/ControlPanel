@@ -61,7 +61,8 @@ export class ManagePortsPageComponent implements OnInit {
         this.editingId = null;
         this.load();
       },
-      error: () => (this.error = 'Update failed — check the API is reachable and you have Admin rights.')
+      error: (err) =>
+        (this.error = serverMessage(err) ?? 'Update failed — check the API is reachable and you have Admin rights.')
     });
   }
 
@@ -87,7 +88,7 @@ export class ManagePortsPageComponent implements OnInit {
         this.adding = false;
         this.load();
       },
-      error: () => (this.error = 'Could not add project — key might already exist.')
+      error: (err) => (this.error = serverMessage(err) ?? 'Could not add project — key might already exist.')
     });
   }
 
@@ -98,4 +99,12 @@ export class ManagePortsPageComponent implements OnInit {
       error: () => (this.error = 'Delete failed.')
     });
   }
+}
+
+// The API explains validation failures (e.g. an adapter host outside the
+// allowlist) in the 400 body — show that instead of a generic message.
+function serverMessage(err: { status?: number; error?: { message?: string | string[] } }): string | null {
+  if (err?.status !== 400) return null;
+  const message = err.error?.message;
+  return Array.isArray(message) ? message.join(' ') : message ?? null;
 }

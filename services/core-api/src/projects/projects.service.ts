@@ -1,13 +1,21 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
+import { checkAdapterBaseUrl, parseAllowedHosts } from './adapter-url';
 import { AdapterStatus, ProjectRegistryEntry, ProjectWithStatus } from './project.model';
 import { CreateProjectDto, UpdateProjectDto } from './dto/project.dto';
 
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
+  private readonly allowedHosts: string[];
 
-  constructor(private db: DatabaseService) {}
+  constructor(
+    private db: DatabaseService,
+    config: ConfigService,
+  ) {
+    this.allowedHosts = parseAllowedHosts(config.get<string>('ADAPTER_ALLOWED_HOSTS'));
+  }
 
   async listRegistry(): Promise<ProjectRegistryEntry[]> {
     const result = await this.db
@@ -41,12 +49,13 @@ export class ProjectsService {
   }
 
   async create(dto: CreateProjectDto): Promise<ProjectRegistryEntry> {
+    const adapterBaseUrl = this.normalizeAdapterUrl(dto.adapterBaseUrl);
     const result = await this.db
       .request()
       .input('key', dto.key)
       .input('displayName', dto.displayName)
       .input('category', dto.category)
-      .input('adapterBaseUrl', dto.adapterBaseUrl)
+      .input('adapterBaseUrl', adapterBaseUrl)
       .query(`
         INSERT INTO dbo.Projects ([Key], DisplayName, Category, AdapterBaseUrl)
         OUTPUT INSERTED.Id, INSERTED.[Key], INSERTED.DisplayName, INSERTED.Category, INSERTED.AdapterBaseUrl, INSERTED.IsActive
@@ -67,6 +76,7 @@ export class ProjectsService {
     if (!existing) throw new NotFoundException(`Project ${id} not found.`);
 
     const merged = { ...existing, ...dto };
+    if (dto.adapterBaseUrl !== undefined) merged.adapterBaseUrl = this.normalizeAdapterUrl(dto.adapterBaseUrl);
 
     await this.db
       .request()
@@ -103,11 +113,27 @@ export class ProjectsService {
     };
   }
 
+  // Validates against the host allowlist and stores only the URL's origin,
+  // so a trailing slash can't turn into `//status` later.
+  private normalizeAdapterUrl(value: string): string {
+    const problem = checkAdapterBaseUrl(value, this.allowedHosts);
+    if (problem) throw new BadRequestException(problem);
+    return new URL(value).origin;
+  }
+
   private async fetchStatus(project: ProjectRegistryEntry): Promise<AdapterStatus> {
+    // Re-checked at fetch time too: rows written before this check existed,
+    // or edited directly in SQL, must not bypass the allowlist.
+    const problem = checkAdapterBaseUrl(project.adapterBaseUrl, this.allowedHosts);
+    if (problem) return { healthy: false, error: `Adapter URL rejected: ${problem}` };
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch(`${project.adapterBaseUrl}/status`, { signal: controller.signal });
+      const response = await fetch(`${new URL(project.adapterBaseUrl).origin}/status`, {
+        signal: controller.signal,
+        redirect: 'error',
+      });
       clearTimeout(timeout);
 
       if (!response.ok) return { healthy: false, error: `Adapter returned HTTP ${response.status}` };
