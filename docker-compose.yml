@@ -1,29 +1,85 @@
-# Local SQL Server and the wUtility Web API run on the host, not in this
-# compose file (they're shared dev infrastructure other projects also use)
-# — containers reach them via host.docker.internal. See README.md for the
-# one-time step to point the Projects registry at container hostnames
-# (http://wutility-adapter:4001 etc.) instead of localhost when running the
-# whole stack this way.
+# Full stack in one command, from a fresh clone:
+#
+#   cp .env.example .env    # then fill in every value
+#   docker compose up --build
+#
+# SQL Server runs in its own container with its own databases, initialized
+# from db/*.sql by the one-shot db-init service and seeded with users by
+# seed-users. The registry is seeded with container hostnames, so there's
+# no manual UPDATE step. The only piece outside this file is wUtility Web's
+# .NET API (a separate repo): wutility-adapter reaches it on the host via
+# host.docker.internal and reports "unreachable" until it's running.
 services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?set SA_PASSWORD in .env}
+    # Published on 14333 so it doesn't collide with a local SQL Server on 1433.
+    ports:
+      - "14333:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/db/init.sh"]
+    environment:
+      SA_PASSWORD: ${SA_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      WUTILITY_ADAPTER: wutility-adapter:4001
+      HISPLUS_ADAPTER: hisplus-adapter:4002
+    volumes:
+      - ./db:/db:ro
+    restart: "no"
+
+  seed-users:
+    build: ./services/core-api
+    command: ["node", "dist/scripts/seed-users.js"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      DB_SERVER: sqlserver
+      DB_PASSWORD: ${DB_PASSWORD}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:?set VIEWER_PASSWORD in .env}
+    restart: "no"
+
   core-api:
     build: ./services/core-api
     ports:
       - "4000:4000"
+    depends_on:
+      seed-users:
+        condition: service_completed_successfully
     environment:
-      DB_SERVER: host.docker.internal
+      DB_SERVER: sqlserver
       DB_NAME: ControlPanelDb
       DB_USER: controlpanel_svc
       DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      # localhost: the not-yet-built adapters are seeded as localhost:40xx and
+      # simply show "unreachable" until they exist.
+      ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter
 
   wutility-adapter:
     build: ./services/adapters/wutility-adapter
     ports:
       - "4001:4001"
     environment:
-      WUTILITY_API_BASE: http://host.docker.internal:5091
+      WUTILITY_API_BASE: ${WUTILITY_API_BASE:-http://host.docker.internal:5091}
+      WUTILITY_API_KEY: ${WUTILITY_API_KEY:?set WUTILITY_API_KEY in .env}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -31,13 +87,14 @@ services:
     build: ./services/adapters/hisplus-adapter
     ports:
       - "4002:4002"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment:
-      DB_SERVER: host.docker.internal
+      DB_SERVER: sqlserver
       DB_NAME: HisPlusDemo
       DB_USER: controlpanel_svc
       DB_PASSWORD: ${DB_PASSWORD}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   frontend:
     build: ./frontend
@@ -45,3 +102,6 @@ services:
       - "4100:80"
     depends_on:
       - core-api
+
+volumes:
+  sqldata:

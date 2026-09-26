@@ -16,6 +16,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   constructor(private config: ConfigService) {}
 
   async onModuleInit() {
+    if (!this.config.get<string>('DB_PASSWORD')) {
+      throw new Error('DB_PASSWORD must be set (see services/core-api/.env.example).');
+    }
     this.pool = await new sql.ConnectionPool({
       server: this.config.get<string>('DB_SERVER', 'localhost'),
       database: this.config.get<string>('DB_NAME', 'ControlPanelDb'),
