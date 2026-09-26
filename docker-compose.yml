@@ -1,0 +1,47 @@
+# Local SQL Server and the wUtility Web API run on the host, not in this
+# compose file (they're shared dev infrastructure other projects also use)
+# — containers reach them via host.docker.internal. See README.md for the
+# one-time step to point the Projects registry at container hostnames
+# (http://wutility-adapter:4001 etc.) instead of localhost when running the
+# whole stack this way.
+services:
+  core-api:
+    build: ./services/core-api
+    ports:
+      - "4000:4000"
+    environment:
+      DB_SERVER: host.docker.internal
+      DB_NAME: ControlPanelDb
+      DB_USER: controlpanel_svc
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  wutility-adapter:
+    build: ./services/adapters/wutility-adapter
+    ports:
+      - "4001:4001"
+    environment:
+      WUTILITY_API_BASE: http://host.docker.internal:5091
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  hisplus-adapter:
+    build: ./services/adapters/hisplus-adapter
+    ports:
+      - "4002:4002"
+    environment:
+      DB_SERVER: host.docker.internal
+      DB_NAME: HisPlusDemo
+      DB_USER: controlpanel_svc
+      DB_PASSWORD: ${DB_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "4100:80"
+    depends_on:
+      - core-api

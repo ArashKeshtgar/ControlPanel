@@ -1,0 +1,19 @@
+<div class="login-page">
+  <form class="login-card" (ngSubmit)="submit()">
+    <h1>Control Panel Login</h1>
+    <p class="subtitle">Central status portal for all projects</p>
+
+    <div class="field">
+      <label>Username</label>
+      <input [(ngModel)]="username" name="username" required autofocus />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" [(ngModel)]="password" name="password" required />
+    </div>
+
+    <div class="error" *ngIf="error">{{ error }}</div>
+
+    <button type="submit" [disabled]="loading">{{ loading ? 'Signing in…' : 'Sign in' }}</button>
+  </form>
+</div>

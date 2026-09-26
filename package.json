@@ -1,0 +1,9 @@
+{
+  "name": "control-panel",
+  "private": true,
+  "workspaces": [
+    "services/core-api",
+    "services/adapters/*",
+    "frontend"
+  ]
+}

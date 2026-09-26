@@ -1,0 +1,65 @@
+<div class="page-content">
+  <a routerLink="/dashboard" class="back-link">← Back to dashboard</a>
+  <h1>Manage adapter ports</h1>
+  <p class="subtitle">The base URL / port each project's adapter microservice listens on.</p>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <button (click)="startAdd()" *ngIf="!adding">+ Add project</button>
+
+  <div class="edit-card" *ngIf="adding">
+    <div class="field">
+      <label>Key (unique, lowercase-with-dashes)</label>
+      <input [(ngModel)]="newProject.key" placeholder="e.g. droffice" />
+    </div>
+    <div class="field">
+      <label>Display name</label>
+      <input [(ngModel)]="newProject.displayName" placeholder="e.g. DrOffice" />
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <input [(ngModel)]="newProject.category" placeholder="e.g. Clinical" />
+    </div>
+    <div class="field">
+      <label>Adapter base URL</label>
+      <input [(ngModel)]="newProject.adapterBaseUrl" class="mono" placeholder="http://localhost:4010" />
+    </div>
+    <div class="actions">
+      <button (click)="saveNew()">Save</button>
+      <button class="secondary" (click)="cancelAdd()">Cancel</button>
+    </div>
+  </div>
+
+  <p *ngIf="loading">Loading…</p>
+
+  <table *ngIf="!loading && projects.length">
+    <thead>
+      <tr><th>Project</th><th>Category</th><th>Adapter URL / port</th><th>Active</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let p of projects">
+        <td>{{ p.displayName }}</td>
+        <td>{{ p.category }}</td>
+        <td>
+          <span *ngIf="editingId !== p.id" class="mono">{{ p.adapterBaseUrl }}</span>
+          <input *ngIf="editingId === p.id" [(ngModel)]="editUrl" class="mono" />
+        </td>
+        <td>
+          <button class="secondary toggle" (click)="toggleActive(p)">
+            {{ p.isActive ? 'Active' : 'Disabled' }}
+          </button>
+        </td>
+        <td class="row-actions">
+          <ng-container *ngIf="editingId === p.id; else viewActions">
+            <button (click)="saveUrl(p)">Save</button>
+            <button class="secondary" (click)="cancelEdit()">Cancel</button>
+          </ng-container>
+          <ng-template #viewActions>
+            <button class="secondary" (click)="startEdit(p)">Edit port</button>
+            <button class="danger" (click)="remove(p)">Remove</button>
+          </ng-template>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

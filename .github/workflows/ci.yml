@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  core-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install
+        working-directory: services/core-api
+      - name: Build
+        run: npm run build
+        working-directory: services/core-api
+      - name: Test
+        run: npm test
+        working-directory: services/core-api
+
+  adapters:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        adapter: [wutility-adapter, hisplus-adapter]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install
+        working-directory: services/adapters/${{ matrix.adapter }}
+      - name: Type-check + build
+        run: npm run build
+        working-directory: services/adapters/${{ matrix.adapter }}
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install
+        working-directory: frontend
+      - name: Build
+        run: npx ng build --configuration production
+        working-directory: frontend
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [core-api, adapters, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build core-api image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/core-api
+          push: false
+          tags: control-panel-core-api:ci
+
+      - name: Build wutility-adapter image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/adapters/wutility-adapter
+          push: false
+          tags: control-panel-wutility-adapter:ci
+
+      - name: Build hisplus-adapter image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/adapters/hisplus-adapter
+          push: false
+          tags: control-panel-hisplus-adapter:ci
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: false
+          tags: control-panel-frontend:ci

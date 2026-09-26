@@ -1,0 +1,22 @@
+:host { display: block; }
+
+.back-link { color: var(--ink-soft); font-size: 0.82rem; text-decoration: none; display: inline-block; margin-bottom: 10px; }
+.back-link:hover { color: var(--ink); }
+
+.edit-card {
+  background: var(--surface-raised); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 18px; margin: 14px 0 20px; display: flex; flex-direction: column; gap: 10px;
+  max-width: 420px;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 0.78rem; color: var(--ink-soft); }
+.actions { display: flex; gap: 8px; margin-top: 4px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 16px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--ink-soft); font-weight: 600; font-size: 0.72rem; }
+
+td input { width: 100%; }
+.toggle { padding: 4px 10px; font-size: 0.76rem; }
+.row-actions { display: flex; gap: 6px; }
+.row-actions button { padding: 5px 10px; font-size: 0.78rem; white-space: nowrap; }

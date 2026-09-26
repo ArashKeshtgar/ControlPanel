@@ -1,0 +1,44 @@
+<div class="page-content">
+  <div class="top-row">
+    <div>
+      <h1>Project Control Panel</h1>
+      <p class="subtitle">
+        {{ auth.currentUser?.username }} ({{ auth.currentUser?.role }}) — live status across all microservices
+      </p>
+    </div>
+    <div class="top-actions">
+      <a routerLink="/manage-ports" *ngIf="auth.currentUser?.role === 'Admin'">
+        <button class="secondary">Manage ports</button>
+      </a>
+      <button class="secondary" (click)="load()">Refresh</button>
+      <button class="secondary" (click)="logout()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+  <p *ngIf="loading">Loading…</p>
+
+  <div *ngFor="let category of categories" class="category-block">
+    <h2>{{ category }}</h2>
+    <div class="card-grid">
+      <div class="project-card" *ngFor="let p of byCategory(category)">
+        <div class="card-head">
+          <h3>{{ p.displayName }}</h3>
+          <span class="badge" [class.good]="p.status.healthy" [class.error]="!p.status.healthy">
+            {{ p.status.healthy ? 'Online' : 'Offline' }}
+          </span>
+        </div>
+
+        <p class="summary" *ngIf="p.status.summary">{{ p.status.summary }}</p>
+        <p class="summary muted" *ngIf="!p.status.healthy">{{ p.status.error }}</p>
+
+        <div class="metrics" *ngIf="metricEntries(p).length">
+          <div class="metric" *ngFor="let entry of metricEntries(p)">
+            <span class="metric-value">{{ entry[1] }}</span>
+            <span class="metric-label">{{ entry[0] }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
