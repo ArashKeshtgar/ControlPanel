@@ -31,7 +31,7 @@ export const ASSISTANT_TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
     name: 'get_job_search_insight',
     description:
       'Read job-search analytics from the LedgerDashboard database. ' +
-      "'followups': sent applications with no action for more than 7 days, oldest first. " +
+      "'followups': sent applications with no action for more than 7 days, oldest first, and whether a hiring contact's email is on file to follow up with (the address itself is not shared). " +
       "'funnel': outcomes by source (sent, awaiting reply, interviewing, offers, rejected, average match score). " +
       "'gaps': skill-gap tags across postings, with how many appeared in rejected applications.",
     input_schema: {

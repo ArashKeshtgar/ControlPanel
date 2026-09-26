@@ -37,7 +37,7 @@ export const SQL = {
       (SELECT COUNT(*) FROM dbo.vFollowupsDue) AS followupsDue
     FROM dbo.vApplicationCurrentStage`,
   followupsDue: `
-    SELECT Company, Role, CurrentStage, CONVERT(varchar(10), LastActionDate, 23) AS LastActionDate, DaysSinceAction
+    SELECT Company, Role, CurrentStage, HasContactEmail, CONVERT(varchar(10), LastActionDate, 23) AS LastActionDate, DaysSinceAction
     FROM dbo.vFollowupsDue ORDER BY DaysSinceAction DESC`,
   funnelBySource: `SELECT * FROM dbo.vFunnelBySource ORDER BY Sent DESC`,
   gapTags: `
