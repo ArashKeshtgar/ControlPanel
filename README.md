@@ -83,6 +83,37 @@ Known limitations: tokens live in `localStorage`, which an XSS bug could read (a
 - **Least-privilege DB login.** `controlpanel_svc` gets read/write on `ControlPanelDb` (no `db_owner`, no DDL) and read-only on `HisPlusDemo`.
 - **No committed secrets.** Every password, key and JWT secret comes from the environment; each service refuses to start without the ones it needs.
 
+## Service control (Docker)
+
+Under Docker Compose every long-running service has `restart: unless-stopped` and a healthcheck, so a crash is recovered without anyone watching. The **Services** page (`/services`) lists the managed containers with their state and health, refreshed every 5 seconds; an Admin can start, stop or restart them and read their recent logs.
+
+```
+browser ──JWT──▶ core-api ──(internal network)──▶ socket-proxy ──ro──▶ /var/run/docker.sock
+                  │ RBAC, name allowlist, audit          list · logs · start · stop only
+                  ▼
+             dbo.AuditLog (insert-only)
+```
+
+- **Least privilege at the Docker API.** core-api never mounts the Docker socket. It talks to `socket-proxy` ([linuxserver/socket-proxy](https://github.com/linuxserver/docker-socket-proxy), pinned), on an `internal` network that only core-api joins, and the proxy forwards only container list, logs, start and stop. Create, exec, delete, kill, images, volumes, networks and `/info` answer `403` there, so even a bug in core-api can't run a new container or a shell. The proxy's restart permission also allows `kill`, so it's left off and core-api restarts as stop + start.
+- **Label allowlist.** Only containers labelled `controlpanel.managed=true` are listed or controlled, addressed by their `controlpanel.service` name. The container id sent to Docker always comes from a fresh filtered listing, never from the request. core-api, the frontend, SQL Server and the proxy carry no label, so the panel can't switch itself off.
+- **RBAC and confirmation.** Anyone signed in sees the list. Start, stop, restart, logs and the audit list are Admin-only. Stop and restart need the service name typed back, and the API checks it (`{"confirm": "<name>"}`), not just the UI. One action per service at a time (`409` otherwise).
+- **Audit.** Every attempt, including refused and failed ones, is a row in `dbo.AuditLog` (who, what, which service, result). `controlpanel_svc` is denied `UPDATE` and `DELETE` on that table.
+- **Logs** are the last 200 lines (500 at most), demultiplexed from Docker's stream format, with bearer tokens, JWTs, API keys and `password=`/`secret=`/`token=` values masked.
+- **The AI assistant stays read-only**: it has no access to these endpoints.
+
+The endpoints: `GET /services`, `POST /services/:name/start|stop|restart`, `GET /services/:name/logs?tail=`, `GET /services/audit`. Without `DOCKER_PROXY_URL` (core-api run with npm on the host) they answer `503`.
+
+The Docker-specific code is one class, `DockerOrchestrator`, behind an `Orchestrator` interface (`list`, `start`, `stop`, `restart`, `logs`). A Kubernetes implementation (scale a Deployment to 0/1, rollout restart, pod logs, with a namespaced ServiceAccount instead of the proxy) can replace it without changing the controller, the audit or the UI.
+
+To put another service under control, give its compose service these labels:
+
+```yaml
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: my-service        # lowercase, digits, - _ .
+      controlpanel.display: "My service"
+```
+
 ## Managing adapter ports
 
 The dashboard's "Manage ports" button (Admin only) opens `/manage-ports`: edit any project's adapter base URL/port inline, toggle a project active/disabled, add a new project row (for the next adapter you build), or remove one — all backed by real `PUT`/`POST`/`DELETE /projects` endpoints. A URL outside the allowlist is rejected with the server's explanation.
@@ -97,7 +128,7 @@ Everything needed to create them is in [`db/`](db/). Every script is safe to re-
 |---|---|
 | `01-databases.sql` | Creates `ControlPanelDb` and `HisPlusDemo` |
 | `02-service-login.sql` | Creates or updates the `controlpanel_svc` login and its least-privilege roles (needs `DB_PASSWORD`) |
-| `03-controlpanel-schema.sql` | `Users` and `Projects` tables, plus column migrations for existing databases |
+| `03-controlpanel-schema.sql` | `Users`, `Projects` and `AuditLog` tables, plus column migrations for existing databases |
 | `04-controlpanel-seed.sql` | The 9-project registry (existing rows are never overwritten) |
 | `05-hisplus-demo.sql` | The `ORReports` table and a few demo rows |
 
@@ -108,7 +139,7 @@ cp .env.example .env   # fill in every value; the file shows how to generate sec
 docker compose up --build
 ```
 
-This starts SQL Server in its own container (published on `14333`, so it doesn't clash with a local instance), runs `db/*.sql` through the one-shot `db-init` service, creates the two users through `seed-users`, then starts `core-api`, both adapters and the frontend on http://localhost:4100. The registry is seeded with container host names, so there's no manual step. Compose stops with a clear message if any variable in `.env` is missing.
+This starts SQL Server in its own container (published on `14333`, so it doesn't clash with a local instance), runs `db/*.sql` through the one-shot `db-init` service, creates the two users through `seed-users`, then starts `core-api`, the socket proxy, the three adapters and the frontend on http://localhost:4100 (set `FRONTEND_PORT` in `.env` if 4100 is taken; core-api allows that origin automatically). The registry is seeded with container host names, so there's no manual step. Compose stops with a clear message if any variable in `.env` is missing.
 
 The only piece outside this file is wUtility Web's .NET API (a separate repo). Start it on the host with the same `WUTILITY_API_KEY`; until then the wUtility card shows "unreachable".
 
@@ -143,9 +174,9 @@ cd frontend && npx ng serve --port 4100                     # :4100
 
 | Where | Run | Covers |
 |---|---|---|
-| `services/core-api` | `npm test` (Jest) | Login, token types and secrets, refresh, logout revocation, RBAC guard, secret validation, SSRF allowlist; the assistant's tool loop with a scripted fake Claude client (parallel tools, error results, refusal, turn cap, rate limit, not-configured 503) |
+| `services/core-api` | `npm test` (Jest) | Login, token types and secrets, refresh, logout revocation, RBAC guard, secret validation, SSRF allowlist; service control (label allowlist, ids only from the listing, names that could change the URL, restart as stop + start, proxy refusals, log demux and masking, confirmation, one action at a time, audit on success and failure, Admin-only routes); the assistant's tool loop with a scripted fake Claude client (parallel tools, error results, refusal, turn cap, rate limit, not-configured 503) |
 | `services/adapters/*` | `npm test` (Jest) | Each adapter's `/status` over real HTTP with the upstream API or database faked: success, upstream errors, timeouts, empty tables |
-| `frontend` | `npm run test:ci` (Karma, headless Chrome) | Token storage, transparent refresh-and-retry, one shared refresh, session end on a rejected refresh, server-side logout, admin route guard, the assistant panel |
+| `frontend` | `npm run test:ci` (Karma, headless Chrome) | Token storage, transparent refresh-and-retry, one shared refresh, session end on a rejected refresh, server-side logout, admin route guard, the assistant panel, service-control error messages |
 
 CI runs all of them, plus the production builds and all five Docker images, on every push.
 

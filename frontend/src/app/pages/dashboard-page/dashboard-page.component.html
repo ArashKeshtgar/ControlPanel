@@ -7,6 +7,9 @@
       </p>
     </div>
     <div class="top-actions">
+      <a routerLink="/services">
+        <button class="secondary">Services</button>
+      </a>
       <a routerLink="/manage-ports" *ngIf="auth.currentUser?.role === 'Admin'">
         <button class="secondary">Manage ports</button>
       </a>

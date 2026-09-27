@@ -9,6 +9,20 @@
 # no manual UPDATE step. The only piece outside this file is wUtility Web's
 # .NET API (a separate repo): wutility-adapter reaches it on the host via
 # host.docker.internal and reports "unreachable" until it's running.
+#
+# Service control (the Services page): long-running services restart on
+# their own (restart: unless-stopped) and report health. Containers labelled
+# controlpanel.managed=true can be started, stopped and restarted from
+# Control Panel by an Admin. core-api reaches Docker only through
+# socket-proxy, on a network nothing else joins, and the proxy forwards
+# nothing but list, logs, start and stop. core-api, the frontend, SQL Server
+# and the proxy itself carry no label, so the panel can't switch itself off.
+x-node-health: &node-health
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 15s
+
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -18,6 +32,7 @@ services:
     # Published on 14333 so it doesn't collide with a local SQL Server on 1433.
     ports:
       - "14333:1433"
+    restart: unless-stopped
     volumes:
       - sqldata:/var/opt/mssql
     healthcheck:
@@ -56,10 +71,38 @@ services:
       VIEWER_PASSWORD: ${VIEWER_PASSWORD:?set VIEWER_PASSWORD in .env}
     restart: "no"
 
+  # Least-privilege Docker API: GET /containers (list, logs) plus POST
+  # start and stop. ALLOW_RESTARTS stays off because it also permits kill;
+  # core-api restarts as stop + start. Everything else (create, exec,
+  # delete, images, volumes, networks, info...) answers 403.
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:3.4.5-r0-ls99
+    environment:
+      CONTAINERS: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_LOGS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs:
+      - /run
+    networks:
+      - docker-control
+    restart: unless-stopped
+
   core-api:
     build: ./services/core-api
     ports:
       - "4000:4000"
+    networks:
+      - default
+      - docker-control
+    restart: unless-stopped
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
     depends_on:
       seed-users:
         condition: service_completed_successfully
@@ -75,11 +118,21 @@ services:
       # localhost: the not-yet-built adapters are seeded as localhost:40xx and
       # simply show "unreachable" until they exist.
       ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter,ledgerdash-adapter
+      DOCKER_PROXY_URL: http://socket-proxy:2375
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-4100}
 
   wutility-adapter:
     build: ./services/adapters/wutility-adapter
     ports:
       - "4001:4001"
+    restart: unless-stopped
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: wutility-adapter
+      controlpanel.display: "wUtility adapter"
     environment:
       WUTILITY_API_BASE: ${WUTILITY_API_BASE:-http://host.docker.internal:5091}
       WUTILITY_API_KEY: ${WUTILITY_API_KEY:?set WUTILITY_API_KEY in .env}
@@ -92,6 +145,14 @@ services:
     build: ./services/adapters/ledgerdash-adapter
     ports:
       - "4006:4006"
+    restart: unless-stopped
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4006/status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: ledgerdash-adapter
+      controlpanel.display: "LedgerDashboard adapter"
     environment:
       DB_SERVER: host.docker.internal
       DB_NAME: LedgerDashboard
@@ -104,6 +165,14 @@ services:
     build: ./services/adapters/hisplus-adapter
     ports:
       - "4002:4002"
+    restart: unless-stopped
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4002/status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: hisplus-adapter
+      controlpanel.display: "HIS+ adapter"
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -115,10 +184,20 @@ services:
 
   frontend:
     build: ./frontend
+    # FRONTEND_PORT in .env if 4100 is taken (e.g. by ng serve).
     ports:
-      - "4100:80"
+      - "${FRONTEND_PORT:-4100}:80"
+    restart: unless-stopped
+    healthcheck:
+      <<: *node-health
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
     depends_on:
       - core-api
+
+networks:
+  # internal: no route out, and only core-api and the proxy are on it.
+  docker-control:
+    internal: true
 
 volumes:
   sqldata:

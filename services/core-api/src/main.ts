@@ -10,7 +10,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   validateJwtSecrets(app.get(ConfigService));
 
-  app.enableCors({ origin: 'http://localhost:4100' });
+  // The browser origins allowed to call the API (comma-separated).
+  const origins = (process.env.CORS_ORIGINS ?? 'http://localhost:4100')
+    .split(',').map((o) => o.trim()).filter(Boolean);
+  app.enableCors({ origin: origins });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()

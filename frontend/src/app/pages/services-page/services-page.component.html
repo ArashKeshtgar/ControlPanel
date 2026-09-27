@@ -1,0 +1,79 @@
+<div class="page-content">
+  <a routerLink="/dashboard" class="back-link">← Back to dashboard</a>
+  <h1>Services</h1>
+  <p class="subtitle">
+    Containers labelled <span class="mono">controlpanel.managed=true</span>. Refreshes every 5 seconds.
+    <ng-container *ngIf="!isAdmin"> Only an Admin can start, stop or read logs.</ng-container>
+  </p>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+  <div class="notice" *ngIf="notice">{{ notice }}</div>
+  <p *ngIf="loading">Loading…</p>
+  <p *ngIf="!loading && !error && !services.length">No managed services are running under Docker.</p>
+
+  <table *ngIf="services.length">
+    <thead>
+      <tr><th>Service</th><th>State</th><th>Health</th><th>Status</th><th *ngIf="isAdmin"></th></tr>
+    </thead>
+    <tbody>
+      <ng-container *ngFor="let s of services">
+        <tr>
+          <td>
+            <div>{{ s.displayName }}</div>
+            <div class="mono muted">{{ s.name }}</div>
+          </td>
+          <td><span class="badge" [class.good]="s.state === 'running'" [class.error]="s.state !== 'running'">{{ s.state }}</span></td>
+          <td>
+            <span class="badge" [class.good]="s.health === 'healthy'" [class.error]="s.health === 'unhealthy'"
+                  [class.warn]="s.health === 'starting'">{{ s.health }}</span>
+          </td>
+          <td class="muted">{{ s.status }}</td>
+          <td class="row-actions" *ngIf="isAdmin">
+            <button *ngIf="s.state !== 'running'" (click)="start(s)" [disabled]="busy === s.name">Start</button>
+            <button *ngIf="s.state === 'running'" class="secondary" (click)="ask(s, 'restart')" [disabled]="busy === s.name">Restart</button>
+            <button *ngIf="s.state === 'running'" class="danger" (click)="ask(s, 'stop')" [disabled]="busy === s.name">Stop</button>
+            <button class="secondary" (click)="showLogs(s)">Logs</button>
+            <span *ngIf="busy === s.name" class="muted">working…</span>
+          </td>
+        </tr>
+        <tr *ngIf="pending?.name === s.name" class="confirm-row">
+          <td colspan="5">
+            <label>
+              Type <strong class="mono">{{ s.name }}</strong> to {{ pending?.action }} it:
+              <input [(ngModel)]="confirmText" class="mono" (keyup.enter)="confirm()" autofocus />
+            </label>
+            <button class="danger" (click)="confirm()" [disabled]="confirmText !== s.name">{{ pending?.action }}</button>
+            <button class="secondary" (click)="cancel()">Cancel</button>
+          </td>
+        </tr>
+      </ng-container>
+    </tbody>
+  </table>
+
+  <section *ngIf="logsFor" class="logs">
+    <div class="logs-head">
+      <h2>Logs — <span class="mono">{{ logsFor }}</span> (last 200 lines, secrets masked)</h2>
+      <div class="row-actions">
+        <button class="secondary" (click)="refreshLogs()" [disabled]="logsLoading">Refresh</button>
+        <button class="secondary" (click)="closeLogs()">Close</button>
+      </div>
+    </div>
+    <pre>{{ logsLoading ? 'Loading…' : logText }}</pre>
+  </section>
+
+  <section *ngIf="isAdmin && audit.length" class="audit">
+    <h2>Recent actions</h2>
+    <table>
+      <thead><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Service</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr *ngFor="let a of audit">
+          <td class="mono">{{ a.at | date: 'yyyy-MM-dd HH:mm:ss' : 'UTC' }}</td>
+          <td>{{ a.username }}</td>
+          <td>{{ a.action }}</td>
+          <td class="mono">{{ a.target }}</td>
+          <td [class.fail]="a.outcome === 'failed'">{{ a.outcome }}<span *ngIf="a.detail" class="muted"> — {{ a.detail }}</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>

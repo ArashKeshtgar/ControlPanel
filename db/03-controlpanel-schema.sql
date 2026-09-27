@@ -34,3 +34,25 @@ BEGIN
     );
 END
 GO
+
+-- Migration (2026-09-27): every start/stop/restart/logs request made
+-- through /services, successful or not. Insert-only from core-api.
+IF OBJECT_ID(N'dbo.AuditLog', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AuditLog (
+        Id        BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_AuditLog PRIMARY KEY,
+        At        DATETIME2     NOT NULL CONSTRAINT DF_AuditLog_At DEFAULT (SYSUTCDATETIME()),
+        UserId    INT           NOT NULL,
+        Username  NVARCHAR(50)  NOT NULL,
+        Action    NVARCHAR(20)  NOT NULL,
+        Target    NVARCHAR(100) NOT NULL,
+        Outcome   NVARCHAR(10)  NOT NULL CONSTRAINT CK_AuditLog_Outcome CHECK (Outcome IN (N'ok', N'failed')),
+        Detail    NVARCHAR(400) NULL
+    );
+END
+GO
+
+-- db_datawriter could otherwise rewrite history; the service login may only add rows.
+IF USER_ID(N'controlpanel_svc') IS NOT NULL
+    DENY UPDATE, DELETE ON dbo.AuditLog TO controlpanel_svc;
+GO
