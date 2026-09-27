@@ -2,7 +2,18 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../auth/auth.service';
+
+// Only a 401 means the credentials were wrong. A server that isn't running
+// (status 0) used to show "Invalid username or password" too, which sent
+// people hunting for a password that was actually correct.
+export function loginErrorMessage(err: HttpErrorResponse): string {
+  if (err.status === 401) return 'Invalid username or password.';
+  if (err.status === 0) return "Can't reach the server — is core-api running on port 4000?";
+  if (err.status === 400) return 'Enter a username and a password (6+ characters).';
+  return `Login failed (server error ${err.status}). Check the core-api log.`;
+}
 
 @Component({
   selector: 'app-login-page',
@@ -27,9 +38,9 @@ export class LoginPageComponent {
         this.loading = false;
         this.router.navigate(['/dashboard']);
       },
-      error: () => {
+      error: (err: HttpErrorResponse) => {
         this.loading = false;
-        this.error = 'Invalid username or password.';
+        this.error = loginErrorMessage(err);
       }
     });
   }
