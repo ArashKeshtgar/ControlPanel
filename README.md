@@ -105,7 +105,17 @@ The endpoints: `GET /services`, `POST /services/:name/start|stop|restart`, `GET 
 
 The Docker-specific code is one class, `DockerOrchestrator`, behind an `Orchestrator` interface (`list`, `start`, `stop`, `restart`, `logs`). A Kubernetes implementation (scale a Deployment to 0/1, rollout restart, pod logs, with a namespaced ServiceAccount instead of the proxy) can replace it without changing the controller, the audit or the UI.
 
-**The apps themselves** are in [`compose.apps.yml`](compose.apps.yml), layered on top (`docker compose -f docker-compose.yml -f compose.apps.yml up -d --build`, or set `COMPOSE_FILE` in `.env`). It builds LedgerDashboard from its own repo (`LEDGERDASH_DIR`), mounts the JobSearch folder, reuses LedgerDashboard's own `server/.env` for its database and Anthropic credentials, and publishes it on `127.0.0.1` only, behind its password login. wUtility Web's API is deliberately not containerized: it syncs SQL Server databases through connection strings that use Windows authentication, which a Linux container can't do.
+**The apps themselves** are in [`compose.apps.yml`](compose.apps.yml), layered on top (`docker compose -f docker-compose.yml -f compose.apps.yml up -d --build`, or set `COMPOSE_FILE` in `.env`). Every web front end is published on `127.0.0.1` only; APIs and databases aren't published at all.
+
+| Service(s) | App | How it runs |
+|---|---|---|
+| `ledgerdashboard` | LedgerDashboard (job-search tracker) | Built from its repo (`LEDGERDASH_DIR`), JobSearch folder mounted, its own `server/.env` for the database and Anthropic credentials, SQL Server on the host, password login |
+| `rebiomed-api`, `rebiomed-web` | ReBiomed (used medical-equipment marketplace, Express + React) | Own MongoDB (`rebiomed-mongo`) on an internal network only the API joins; nginx serves the React build and proxies `/api` and `/uploads`; uploads in volumes; demo listings with `docker compose --profile seed run --rm rebiomed-seed`; Stripe keys optional |
+| `labflow-api`, `labflow-web` | LabFlow (Ontario lab system, ASP.NET Core + React) | The `LabFlow` database on the host SQL Server through its own `labflow_svc` login ([`deploy/labflow/sql-login.sql`](deploy/labflow/sql-login.sql): read/write, sequence use, the audit schema append-only). Runs as Development, the only mode with LabFlow's demo sign-in, which is why it must stay on 127.0.0.1 |
+
+ReBiomed and LabFlow are still being developed, so their Dockerfiles live here in [`deploy/`](deploy/) (with per-Dockerfile `.dockerignore` files) and build from each repo's working folder (`REBIOMED_DIR`, `LABFLOW_DIR`, `DEPLOY_DIR`); they can move into the app repos once those settle. After LabFlow's `database/deploy.ps1 -Recreate`, run `sql-login.sql` again: dropping the database drops its user.
+
+wUtility Web's API is deliberately not containerized: it syncs SQL Server databases through connection strings that use Windows authentication, which a Linux container can't do.
 
 To put another service under control, give its compose service these labels:
 

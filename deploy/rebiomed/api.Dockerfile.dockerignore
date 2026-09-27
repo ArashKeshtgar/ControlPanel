@@ -1,0 +1,9 @@
+**/node_modules
+dist
+client
+uploads
+private-uploads
+.env
+.env.*
+.git
+test

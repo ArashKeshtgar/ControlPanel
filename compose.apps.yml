@@ -7,6 +7,11 @@
 # instead of ";" on Linux/macOS). The apps live in their own repos, so
 # their paths come from .env.
 #
+# ReBiomed and LabFlow are still being developed in their own repos, so
+# their Dockerfiles live here under deploy/ and build from the repos'
+# working folders (REBIOMED_DIR, LABFLOW_DIR). Each app's web container is
+# published on 127.0.0.1 only; APIs and databases aren't published at all.
+#
 # Not here on purpose: wUtility Web's API. It compares and syncs SQL Server
 # databases using the connection strings the user types, which on this
 # machine use Windows authentication; a Linux container can't do that, so
@@ -44,3 +49,153 @@ services:
       controlpanel.managed: "true"
       controlpanel.service: ledgerdashboard
       controlpanel.display: "LedgerDashboard"
+
+  # ---------------------------------------------------------- ReBiomed --
+  # Its own MongoDB with its own data (not the dev database the app uses
+  # on the host), reachable only from the ReBiomed API.
+  rebiomed-mongo:
+    image: mongo:7
+    volumes:
+      - rebiomed-mongo:/data/db
+    networks:
+      - rebiomed
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+
+  rebiomed-api:
+    build:
+      context: ${REBIOMED_DIR:?set REBIOMED_DIR in .env (the ReBiomed repo folder)}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/rebiomed/api.Dockerfile
+    depends_on:
+      rebiomed-mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://rebiomed-mongo:27017/rebiomed
+      JWT_SECRET: ${REBIOMED_JWT_SECRET:?set REBIOMED_JWT_SECRET in .env (32+ chars)}
+      CLIENT_URL: http://localhost:${REBIOMED_PORT:-3100}
+      # Stripe test keys, optional: without them checkout and payouts fail
+      # and the rest of the marketplace works. The app builds its Stripe
+      # client at startup and that throws on an empty key, hence the
+      # obviously fake default, which Stripe rejects on first use.
+      STRIPE_SECRET_KEY: ${REBIOMED_STRIPE_SECRET_KEY:-sk_test_not_configured}
+      STRIPE_WEBHOOK_SECRET: ${REBIOMED_STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CONNECT_WEBHOOK_SECRET: ${REBIOMED_STRIPE_CONNECT_WEBHOOK_SECRET:-}
+    volumes:
+      - rebiomed-uploads:/app/uploads
+      - rebiomed-private:/app/private-uploads
+    networks:
+      - default
+      - rebiomed
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/api/categories').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: rebiomed-api
+      controlpanel.display: "ReBiomed API"
+
+  # One-shot demo data (fictional sellers and listings):
+  #   docker compose --profile seed run --rm rebiomed-seed
+  rebiomed-seed:
+    image: controlpanel-rebiomed-api
+    profiles: ["seed"]
+    command: ["node", "dist/seed/seedProducts.js"]
+    depends_on:
+      rebiomed-mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://rebiomed-mongo:27017/rebiomed
+      JWT_SECRET: ${REBIOMED_JWT_SECRET}
+    networks:
+      - rebiomed
+    restart: "no"
+
+  rebiomed-web:
+    build:
+      context: ${REBIOMED_DIR}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/rebiomed/web.Dockerfile
+      additional_contexts:
+        deploy: ./deploy/rebiomed
+      args:
+        REACT_APP_STRIPE_PUBLISHABLE_KEY: ${REBIOMED_STRIPE_PUBLISHABLE_KEY:-}
+    depends_on:
+      - rebiomed-api
+    ports:
+      - "127.0.0.1:${REBIOMED_PORT:-3100}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: rebiomed-web
+      controlpanel.display: "ReBiomed web"
+
+  # ----------------------------------------------------------- LabFlow --
+  # Uses the LabFlow database on the host SQL Server through labflow_svc
+  # (deploy/labflow/sql-login.sql). Runs as Development because that's
+  # where LabFlow's demo sign-in (a role switcher, no password) exists;
+  # that's why it's bound to 127.0.0.1 and must stay that way.
+  labflow-api:
+    build:
+      context: ${LABFLOW_DIR:?set LABFLOW_DIR in .env (the LabFlow repo folder)}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/labflow/api.Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__LabFlow: "Server=host.docker.internal,1433;Database=LabFlow;User Id=labflow_svc;Password=${LABFLOW_DB_PASSWORD:?set LABFLOW_DB_PASSWORD in .env};TrustServerCertificate=True"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+      # The aspnet image has no curl or wget; bash can speak HTTP/1.0.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/me HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: labflow-api
+      controlpanel.display: "LabFlow API"
+
+  labflow-web:
+    build:
+      context: ${LABFLOW_DIR}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/labflow/web.Dockerfile
+      additional_contexts:
+        deploy: ./deploy/labflow
+    depends_on:
+      - labflow-api
+    ports:
+      - "127.0.0.1:${LABFLOW_PORT:-5175}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: labflow-web
+      controlpanel.display: "LabFlow web"
+
+networks:
+  # internal: MongoDB has no route out and only the ReBiomed API can reach it.
+  rebiomed:
+    internal: true
+
+volumes:
+  rebiomed-mongo:
+  rebiomed-uploads:
+  rebiomed-private:
