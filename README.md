@@ -105,6 +105,8 @@ The endpoints: `GET /services`, `POST /services/:name/start|stop|restart`, `GET 
 
 The Docker-specific code is one class, `DockerOrchestrator`, behind an `Orchestrator` interface (`list`, `start`, `stop`, `restart`, `logs`). A Kubernetes implementation (scale a Deployment to 0/1, rollout restart, pod logs, with a namespaced ServiceAccount instead of the proxy) can replace it without changing the controller, the audit or the UI.
 
+**The apps themselves** are in [`compose.apps.yml`](compose.apps.yml), layered on top (`docker compose -f docker-compose.yml -f compose.apps.yml up -d --build`, or set `COMPOSE_FILE` in `.env`). It builds LedgerDashboard from its own repo (`LEDGERDASH_DIR`), mounts the JobSearch folder, reuses LedgerDashboard's own `server/.env` for its database and Anthropic credentials, and publishes it on `127.0.0.1` only, behind its password login. wUtility Web's API is deliberately not containerized: it syncs SQL Server databases through connection strings that use Windows authentication, which a Linux container can't do.
+
 To put another service under control, give its compose service these labels:
 
 ```yaml

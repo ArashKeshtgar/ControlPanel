@@ -1,0 +1,46 @@
+# The portfolio apps themselves, as Control Panel-managed containers.
+# Layered on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f compose.apps.yml up -d --build
+#
+# (or put COMPOSE_FILE=docker-compose.yml;compose.apps.yml in .env; use ":"
+# instead of ";" on Linux/macOS). The apps live in their own repos, so
+# their paths come from .env.
+#
+# Not here on purpose: wUtility Web's API. It compares and syncs SQL Server
+# databases using the connection strings the user types, which on this
+# machine use Windows authentication; a Linux container can't do that, so
+# it stays a host process and wutility-adapter reaches it on the host.
+services:
+  ledgerdashboard:
+    build: ${LEDGERDASH_DIR:?set LEDGERDASH_DIR in .env (the LedgerDashboard repo folder)}
+    # The app's own server/.env supplies STORE, DB_PASSWORD (ledger_svc)
+    # and ANTHROPIC_API_KEY, so no secret is copied into this repo's .env.
+    env_file:
+      - path: ${LEDGERDASH_DIR}/server/.env
+        required: true
+    environment:
+      DB_SERVER: host.docker.internal
+      # Required on 0.0.0.0: the server refuses to start without a login.
+      DASHBOARD_PASSWORD: ${LEDGERDASH_PASSWORD:?set LEDGERDASH_PASSWORD in .env (12+ chars)}
+      SESSION_SECRET: ${LEDGERDASH_SESSION_SECRET:?set LEDGERDASH_SESSION_SECRET in .env (32+ chars)}
+      # Plain http on this machine: a Secure cookie would never be sent back.
+      COOKIE_SECURE: "false"
+    volumes:
+      - ${JOBSEARCH_DIR:?set JOBSEARCH_DIR in .env (the JobSearch folder)}:/data/JobSearch
+    # 127.0.0.1 only: the login is a single shared password, not meant for the LAN.
+    ports:
+      - "127.0.0.1:${LEDGERDASH_PORT:-4310}:4310"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4310/api/session').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: ledgerdashboard
+      controlpanel.display: "LedgerDashboard"
