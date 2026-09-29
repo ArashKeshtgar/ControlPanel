@@ -19,6 +19,7 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 | `compose.vps.yml` | server | VPS layer over the two base compose files |
 | `Caddyfile` | server (caddy container) | HTTPS, basic auth for the private sites |
 | `.env.vps.example` | server | template for `/srv/portfolio/ControlPanel/.env` |
+| `make-env.sh` | server, once | fills both `.env` files with generated secrets |
 | `export-dbs.ps1` | Windows PC | backs up LedgerDashboard and LabFlow for the move |
 | `restore-db.sh` | server | restores `.bak` files and recreates the app logins |
 | `deploy.sh` | server | pull all repos, rebuild, wait for health |
@@ -59,9 +60,6 @@ From now on everything is as `deploy`.
 
 ## 4. Code, secrets and the JobSearch folder
 
-LabFlow has no GitHub repo yet: create an empty one on github.com/new and push
-`D:\E\Projects\LabFlow` to it first.
-
 ```bash
 cd /srv/portfolio
 git clone https://github.com/ArashKeshtgar/ControlPanel.git
@@ -70,23 +68,14 @@ git clone https://github.com/ArashKeshtgar/Rebiomed.git
 git clone https://github.com/ArashKeshtgar/LabFlow.git
 
 cd ControlPanel
-cp deploy/vps/.env.vps.example .env
-nano .env          # every value; NEW passwords, not the PC's
-chmod 600 .env
+deploy/vps/make-env.sh <your-domain> <your-email>
 ```
 
-LedgerDashboard reads its own `server/.env`:
-
-```bash
-cat > /srv/portfolio/LedgerDashboard/server/.env <<'EOF'
-STORE=sql
-DB_NAME=LedgerDashboard
-DB_USER=ledger_svc
-DB_PASSWORD=<new password, 8+ chars, upper/lower/digit/symbol>
-ANTHROPIC_API_KEY=<optional>
-EOF
-chmod 600 /srv/portfolio/LedgerDashboard/server/.env
-```
+`make-env.sh` writes `.env` and `LedgerDashboard/server/.env` (mode 600) and
+generates every password and secret on the server. It asks once for the
+basic-auth password and prints the Control Panel and LedgerDashboard logins:
+save them in a password manager. The only values it leaves empty are
+optional: `ANTHROPIC_API_KEY` and ReBiomed's Stripe test keys.
 
 The JobSearch folder isn't in git. From the PC (PowerShell):
 
