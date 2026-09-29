@@ -1,0 +1,52 @@
+# Caddy gets and renews Let's Encrypt certificates for every site below by
+# itself, once each domain's DNS A record points at this server.
+# Values come from the caddy service's environment (compose.vps.yml).
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Only the owner's eyes: LabFlow's demo sign-in has no password, and
+# LedgerDashboard holds the job search (companies, contacts).
+(private) {
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+}
+
+# Control Panel: public, with its own login (hand out the viewer account).
+{$PANEL_DOMAIN} {
+	import common
+	reverse_proxy frontend:80
+}
+
+# ReBiomed marketplace: public demo.
+{$REBIOMED_DOMAIN} {
+	import common
+	reverse_proxy rebiomed-web:80
+}
+
+{$LABFLOW_DOMAIN} {
+	import common
+	import private
+	reverse_proxy labflow-web:80
+}
+
+{$LEDGER_DOMAIN} {
+	import common
+	import private
+	reverse_proxy ledgerdashboard:4310
+}

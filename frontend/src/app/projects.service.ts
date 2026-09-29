@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { API_BASE } from './auth/auth.service';
 
 export interface AdapterStatus {
   healthy: boolean;
@@ -35,8 +36,6 @@ export interface UpdateProjectRequest {
   adapterBaseUrl?: string;
   isActive?: boolean;
 }
-
-const API_BASE = 'http://localhost:4000';
 
 @Injectable({ providedIn: 'root' })
 export class ProjectsService {

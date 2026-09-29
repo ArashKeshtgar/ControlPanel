@@ -1,0 +1,110 @@
+# VPS layer: the whole portfolio on one Linux server behind Caddy (HTTPS).
+# Layered on top of the two base files; the server's .env sets
+#
+#   COMPOSE_FILE=docker-compose.yml:compose.apps.yml:deploy/vps/compose.vps.yml
+#
+# so a plain `docker compose up -d --build` in the repo root uses all three.
+# See deploy/vps/README.md.
+#
+# What changes compared with running on the Windows dev machine:
+#   - Nothing publishes a port except Caddy (80/443). Docker writes its own
+#     iptables rules and bypasses ufw, so a published port would be open to
+#     the internet whatever the firewall says. `!reset` needs Compose 2.24+.
+#   - LedgerDashboard's and LabFlow's databases live in the container SQL
+#     Server (restored from backups by restore-db.sh) instead of on the host.
+#   - SQL Server runs as Express: the Developer edition isn't licensed for
+#     anything the public can reach.
+#   - wutility-adapter reads the wUtility Web demo on Azure.
+services:
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      PANEL_DOMAIN: ${PANEL_DOMAIN:?set PANEL_DOMAIN in .env}
+      REBIOMED_DOMAIN: ${REBIOMED_DOMAIN:?set REBIOMED_DOMAIN in .env}
+      LABFLOW_DOMAIN: ${LABFLOW_DOMAIN:?set LABFLOW_DOMAIN in .env}
+      LEDGER_DOMAIN: ${LEDGER_DOMAIN:?set LEDGER_DOMAIN in .env}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
+    volumes:
+      - ./deploy/vps/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - rebiomed-web
+      - labflow-web
+      - ledgerdashboard
+    restart: unless-stopped
+
+  sqlserver:
+    ports: !reset []
+    environment:
+      MSSQL_PID: Express
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    volumes:
+      # backup.sh and restore-db.sh exchange .bak files through here. The
+      # folder must belong to uid 10001 (mssql); bootstrap.sh creates it.
+      - ${BACKUP_DIR:-/srv/backups}/mssql:/var/opt/mssql/backup
+
+  core-api:
+    ports: !reset []
+    environment:
+      CORS_ORIGINS: https://${PANEL_DOMAIN}
+
+  wutility-adapter:
+    ports: !reset []
+    environment:
+      WUTILITY_API_BASE: ${WUTILITY_API_BASE:-https://wutility-arash.azurewebsites.net}
+
+  ledgerdash-adapter:
+    ports: !reset []
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_SERVER: sqlserver
+
+  hisplus-adapter:
+    ports: !reset []
+
+  frontend:
+    ports: !reset []
+
+  ledgerdashboard:
+    ports: !reset []
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      DB_SERVER: sqlserver
+      # Behind Caddy over HTTPS, so the session cookie can be Secure.
+      COOKIE_SECURE: "true"
+
+  rebiomed-api:
+    environment:
+      CLIENT_URL: https://${REBIOMED_DOMAIN}
+
+  rebiomed-web:
+    ports: !reset []
+
+  labflow-api:
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      # Still Development: LabFlow's demo sign-in (a role switcher with no
+      # password) only exists there, which is why the Caddyfile puts the
+      # whole site behind basic auth.
+      ConnectionStrings__LabFlow: "Server=sqlserver,1433;Database=LabFlow;User Id=labflow_svc;Password=${LABFLOW_DB_PASSWORD};TrustServerCertificate=True"
+
+  labflow-web:
+    ports: !reset []
+
+volumes:
+  caddy-data:
+  caddy-config:

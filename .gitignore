@@ -3,6 +3,10 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.vps.example
 .angular/
 *.log
 *.tsbuildinfo
+
+# VPS: database exports (personal data) from deploy/vps/export-dbs.ps1
+deploy/vps/export/

@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, isDevMode } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, catchError, finalize, map, of, shareReplay, tap } from 'rxjs';
 
@@ -13,7 +13,9 @@ export interface TokenPair {
   refreshToken: string;
 }
 
-export const API_BASE = 'http://localhost:4000';
+// ng serve talks to core-api directly; the built app (docker compose, the
+// VPS) calls /api on its own origin and the frontend's nginx forwards it.
+export const API_BASE = isDevMode() ? 'http://localhost:4000' : '/api';
 const TOKEN_KEY = 'cp_access_token';
 const REFRESH_KEY = 'cp_refresh_token';
 const USER_KEY = 'cp_user';
