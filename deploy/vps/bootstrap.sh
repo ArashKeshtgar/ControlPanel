@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
-# One-time setup of a fresh Ubuntu 24.04 VPS, run as root:
+# One-time setup of a fresh Ubuntu 24.04 VPS, as root or through sudo from
+# the provider's default user (OVH's Ubuntu images log in as `ubuntu`):
 #
 #   curl -fsSL https://raw.githubusercontent.com/ArashKeshtgar/ControlPanel/main/deploy/vps/bootstrap.sh -o bootstrap.sh
 #   less bootstrap.sh          # read it first
-#   bash bootstrap.sh
+#   sudo bash bootstrap.sh
 #
-# It needs your SSH public key in /root/.ssh/authorized_keys (every provider
-# puts it there when you pick a key while creating the server).
+# It needs your SSH public key on the server (every provider installs it when
+# you pick a key while creating the server). The key is copied from the
+# account that ran sudo, or from root.
 #
 # What it does: updates the system, creates the `deploy` user with your key,
 # turns off root and password logins over SSH, firewall (22, 80, 443 only),
 # fail2ban, automatic security updates, swap, Docker, the /srv folders, and
 # an SSH key GitHub can use if a repo ever becomes private.
 #
-# KEEP THIS ROOT SESSION OPEN until you've logged in as deploy from a second
+# KEEP THIS SESSION OPEN until you've logged in as deploy from a second
 # terminal: if something went wrong with the key, this session is the way back.
 set -euo pipefail
 
@@ -29,7 +31,12 @@ die() { printf '\033[1;31m%s\033[0m\n' "$*" >&2; exit 1; }
 [[ "$ID" == "ubuntu" ]] || die "Written for Ubuntu (24.04); this is $PRETTY_NAME."
 # The SQL Server image only exists for x86-64; an ARM server can't run it.
 [[ "$(uname -m)" == "x86_64" ]] || die "SQL Server needs an x86-64 server; this one is $(uname -m)."
-[[ -s /root/.ssh/authorized_keys ]] || die "No key in /root/.ssh/authorized_keys; add your public key first, or you'd lock yourself out."
+# The key you logged in with: from the sudo caller (e.g. ubuntu), else root.
+KEYS_FROM=/root/.ssh/authorized_keys
+if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
+  KEYS_FROM="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.ssh/authorized_keys"
+fi
+[[ -s "$KEYS_FROM" ]] || die "No key in $KEYS_FROM; add your public key first, or you'd lock yourself out."
 
 log "System update"
 export DEBIAN_FRONTEND=noninteractive
@@ -45,7 +52,7 @@ if ! id "$DEPLOY_USER" &>/dev/null; then
 fi
 usermod -aG sudo "$DEPLOY_USER"
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
-install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /root/.ssh/authorized_keys "/home/$DEPLOY_USER/.ssh/authorized_keys"
+install -m 600 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$KEYS_FROM" "/home/$DEPLOY_USER/.ssh/authorized_keys"
 if passwd -S "$DEPLOY_USER" | grep -q ' L '; then
   echo "Choose a password for $DEPLOY_USER (sudo asks for it; SSH never will):"
   passwd "$DEPLOY_USER"
@@ -143,8 +150,10 @@ first time you connect, and with VPS_KNOWN_HOSTS later):
 
 Next:
   1. From your PC, in a NEW terminal:  ssh $DEPLOY_USER@<server-ip>
-     Only after that works, close this root session.
-  2. Continue with deploy/vps/README.md, step 3 (clone and .env).
+     Only after that works, close this session.
+     If the server came with a default user (ubuntu), remove it then:
+       sudo deluser --remove-home ubuntu && sudo rm -f /etc/sudoers.d/90-cloud-init-users
+  2. Continue with deploy/vps/README.md, step 4 (clone and .env).
 
 Public key of $DEPLOY_USER (only needed if a repo becomes private -> add it
 on GitHub as that repo's read-only deploy key):

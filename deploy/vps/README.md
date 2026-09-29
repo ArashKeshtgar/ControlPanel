@@ -39,18 +39,23 @@ Four A records, all to the server's IPv4 (and AAAA if it has IPv6):
 `panel`, `rebiomed`, `labflow`, `ledger`. Caddy can only get certificates once
 these resolve, so do this early.
 
-## 3. Bootstrap (as root)
+## 3. Bootstrap
+
+Log in the way the provider set up: `root`, or on OVH's Ubuntu images the
+`ubuntu` user (root login is off there).
 
 ```bash
-ssh root@<server-ip>
+ssh ubuntu@<server-ip>          # or root@
 curl -fsSL https://raw.githubusercontent.com/ArashKeshtgar/ControlPanel/main/deploy/vps/bootstrap.sh -o bootstrap.sh
 less bootstrap.sh
-bash bootstrap.sh
+sudo bash bootstrap.sh
 ```
 
 Then, **without closing that session**, from a second terminal:
-`ssh deploy@<server-ip>`. Only when that works, log out of root. From now on
-everything is as `deploy`.
+`ssh deploy@<server-ip>`. Only when that works, log out of the first one and,
+as `deploy`, remove the provider's default user (it has password-less sudo):
+`sudo deluser --remove-home ubuntu && sudo rm -f /etc/sudoers.d/90-cloud-init-users`.
+From now on everything is as `deploy`.
 
 ## 4. Code, secrets and the JobSearch folder
 
