@@ -39,6 +39,9 @@ read -r -s -p "Basic-auth password for labflow/ledger (12+ chars): " BA1; echo
 read -r -s -p "Again: " BA2; echo
 [[ "$BA1" == "$BA2" ]] || { echo "They differ." >&2; exit 1; }
 [[ ${#BA1} -ge 12 ]] || { echo "Too short." >&2; exit 1; }
+# Nothing is echoed, so a non-Latin keyboard layout goes unnoticed here and
+# the password then never matches in the browser.
+[[ "$BA1" == "$(printf '%s' "$BA1" | LC_ALL=C tr -cd ' -~')" ]]   || { echo "Only English letters, digits and symbols (check the keyboard layout)." >&2; exit 1; }
 # Through stdin, so the password never appears in a process list.
 BA_HASH="$(printf '%s\n' "$BA1" | docker run --rm -i caddy:2 caddy hash-password)"
 unset BA1 BA2
