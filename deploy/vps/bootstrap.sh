@@ -59,7 +59,11 @@ if passwd -S "$DEPLOY_USER" | grep -q ' L '; then
 fi
 
 log "SSH: keys only, no root"
-cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
+# sshd keeps the FIRST value it reads, and cloud images ship
+# 50-cloud-init.conf with PasswordAuthentication yes: this file has to sort
+# before it, and the old name is removed in case an earlier run left it.
+rm -f /etc/ssh/sshd_config.d/99-hardening.conf
+cat > /etc/ssh/sshd_config.d/00-hardening.conf <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -69,6 +73,7 @@ X11Forwarding no
 EOF
 sshd -t
 systemctl reload ssh
+sshd -T | grep -qx 'passwordauthentication no' || die "sshd still accepts passwords; check /etc/ssh/sshd_config.d/."
 
 log "Firewall"
 ufw default deny incoming
