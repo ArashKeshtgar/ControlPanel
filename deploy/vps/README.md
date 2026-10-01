@@ -1,13 +1,14 @@
 # Running the portfolio on one VPS
 
 Everything that runs as containers on the dev machine (Control Panel, its
-adapters, LedgerDashboard, ReBiomed, LabFlow) on a single Linux server, behind
-Caddy with automatic HTTPS. wUtility Web stays on Azure; its adapter reads the
-Azure demo.
+adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons) on a single
+Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
+its adapter reads the Azure demo.
 
 ```
 internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx, /api -> core-api)   public, own login
                          ├─ rebiomed.<domain>  -> rebiomed-web -> rebiomed-api -> mongo  public demo
+                         ├─ english.<domain>   -> lessons-web (static)                  public
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
                          └─ ledger.<domain>    -> ledgerdashboard                        basic auth
              SQL Server (Express), MongoDB, core-api, adapters: no published ports
@@ -36,8 +37,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 
 ## 2. Domain and DNS
 
-Four A records, all to the server's IPv4 (and AAAA if it has IPv6):
-`panel`, `rebiomed`, `labflow`, `ledger`. Caddy can only get certificates once
+Five A records, all to the server's IPv4 (and AAAA if it has IPv6):
+`panel`, `rebiomed`, `english`, `labflow`, `ledger`. Caddy can only get certificates once
 these resolve, so do this early.
 
 ## 3. Bootstrap
@@ -66,6 +67,7 @@ git clone https://github.com/ArashKeshtgar/ControlPanel.git
 git clone https://github.com/ArashKeshtgar/LedgerDashboard.git
 git clone https://github.com/ArashKeshtgar/Rebiomed.git
 git clone https://github.com/ArashKeshtgar/LabFlow.git
+git clone https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
 
 cd ControlPanel
 deploy/vps/make-env.sh <your-domain> <your-email>

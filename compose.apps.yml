@@ -190,6 +190,25 @@ services:
       controlpanel.service: labflow-web
       controlpanel.display: "LabFlow web"
 
+  # ---------------------------------------------- Language Lesson Designer --
+  # Static Vue build (English collocation lessons); no API, no database.
+  lessons-web:
+    build:
+      context: ${LESSONS_DIR:?set LESSONS_DIR in .env (the LanguageLessonDesigner repo folder)}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/lessons/web.Dockerfile
+    ports:
+      - "127.0.0.1:${LESSONS_PORT:-5176}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: lessons-web
+      controlpanel.display: "English lessons"
+
 networks:
   # internal: MongoDB has no route out and only the ReBiomed API can reach it.
   rebiomed:

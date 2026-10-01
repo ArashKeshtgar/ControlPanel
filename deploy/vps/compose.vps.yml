@@ -28,6 +28,7 @@ services:
       REBIOMED_DOMAIN: ${REBIOMED_DOMAIN:?set REBIOMED_DOMAIN in .env}
       LABFLOW_DOMAIN: ${LABFLOW_DOMAIN:?set LABFLOW_DOMAIN in .env}
       LEDGER_DOMAIN: ${LEDGER_DOMAIN:?set LEDGER_DOMAIN in .env}
+      LESSONS_DOMAIN: ${LESSONS_DOMAIN:?set LESSONS_DOMAIN in .env}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
@@ -39,6 +40,7 @@ services:
       - rebiomed-web
       - labflow-web
       - ledgerdashboard
+      - lessons-web
     restart: unless-stopped
 
   sqlserver:
@@ -103,6 +105,9 @@ services:
       ConnectionStrings__LabFlow: "Server=sqlserver,1433;Database=LabFlow;User Id=labflow_svc;Password=${LABFLOW_DB_PASSWORD};TrustServerCertificate=True"
 
   labflow-web:
+    ports: !reset []
+
+  lessons-web:
     ports: !reset []
 
 volumes:

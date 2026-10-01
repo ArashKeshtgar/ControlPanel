@@ -39,6 +39,12 @@
 	reverse_proxy rebiomed-web:80
 }
 
+# English collocation lessons: public (also on GitHub Pages).
+{$LESSONS_DOMAIN} {
+	import common
+	reverse_proxy lessons-web:80
+}
+
 {$LABFLOW_DOMAIN} {
 	import common
 	import private

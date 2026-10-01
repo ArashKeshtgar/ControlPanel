@@ -9,8 +9,8 @@
 #   ControlPanel/.env                 from deploy/vps/.env.vps.example
 #   LedgerDashboard/server/.env       LedgerDashboard's own settings
 #
-# Sites become panel.<domain>, rebiomed.<domain>, labflow.<domain> and
-# ledger.<domain>. It asks once for the basic-auth password (LabFlow and
+# Sites become panel.<domain>, rebiomed.<domain>, english.<domain>,
+# labflow.<domain> and ledger.<domain>. It asks once for the basic-auth password (LabFlow and
 # LedgerDashboard) and prints the logins you'll need; nothing else is shown.
 # Refuses to overwrite an existing file.
 set -euo pipefail
@@ -57,6 +57,7 @@ declare -A V=(
   [REBIOMED_DOMAIN]="rebiomed.$DOMAIN"
   [LABFLOW_DOMAIN]="labflow.$DOMAIN"
   [LEDGER_DOMAIN]="ledger.$DOMAIN"
+  [LESSONS_DOMAIN]="english.$DOMAIN"
   [BASIC_AUTH_HASH]="'$BA_HASH'"
   [SA_PASSWORD]="$(sqlpw)"
   [DB_PASSWORD]="$(sqlpw)"
