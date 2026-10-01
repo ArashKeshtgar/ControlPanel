@@ -78,7 +78,10 @@ services:
     ports: !reset []
 
   ledgerdashboard:
-    ports: !reset []
+    # Loopback only: the nightly job search on the PC reaches it through
+    # `ssh -L 14310:127.0.0.1:4310`, with the API token instead of a login.
+    ports: !override
+      - "127.0.0.1:4310:4310"
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -86,6 +89,8 @@ services:
       DB_SERVER: sqlserver
       # Behind Caddy over HTTPS, so the session cookie can be Secure.
       COOKIE_SECURE: "true"
+      # For scripts (Authorization: Bearer ...); empty turns it off.
+      API_TOKEN: ${LEDGERDASH_API_TOKEN:-}
 
   rebiomed-api:
     environment:
