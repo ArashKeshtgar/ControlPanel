@@ -82,6 +82,10 @@ services:
     # `ssh -L 14310:127.0.0.1:4310`, with the API token instead of a login.
     ports: !override
       - "127.0.0.1:4310:4310"
+    # The image runs as node (uid 1000), but /srv/portfolio/JobSearch belongs
+    # to deploy (uid 1001), so new application folders failed with EACCES.
+    # HOME=/tmp: uid 1001 has no home in the image and LibreOffice needs one.
+    user: "1001:1001"
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -91,6 +95,7 @@ services:
       COOKIE_SECURE: "true"
       # For scripts (Authorization: Bearer ...); empty turns it off.
       API_TOKEN: ${LEDGERDASH_API_TOKEN:-}
+      HOME: /tmp
 
   rebiomed-api:
     environment:
