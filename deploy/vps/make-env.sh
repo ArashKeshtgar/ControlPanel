@@ -58,6 +58,7 @@ declare -A V=(
   [LABFLOW_DOMAIN]="labflow.$DOMAIN"
   [LEDGER_DOMAIN]="ledger.$DOMAIN"
   [LESSONS_DOMAIN]="english.$DOMAIN"
+  [CONTEXT_DOMAIN]="ctx.$DOMAIN"
   [BASIC_AUTH_HASH]="'$BA_HASH'"
   [SA_PASSWORD]="$(sqlpw)"
   [DB_PASSWORD]="$(sqlpw)"
@@ -106,7 +107,7 @@ in the files above if you ever need them):
   Control Panel   https://panel.$DOMAIN      admin  / $ADMIN_PW
                                                   viewer / $VIEWER_PW
   LedgerDashboard https://ledger.$DOMAIN     password: $LEDGER_LOGIN_PW
-  LabFlow + Ledger basic auth                     user: arash, the password you typed
+  LabFlow + Ledger + ctx basic auth               user: arash, the password you typed
 
 Optional, fill in by hand if you want them:
   ANTHROPIC_API_KEY (both files), REBIOMED_STRIPE_* (test keys)

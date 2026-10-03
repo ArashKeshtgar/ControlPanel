@@ -39,6 +39,10 @@ for name in "${!REPOS[@]}"; do
   fi
 done
 
+# Caddy mounts this for ctx.<domain>; made here (as deploy) so Docker doesn't
+# create it root-owned and push-context.ps1 can still write into it.
+mkdir -p "$ROOT/context"
+
 [[ -f "$CP/.env" ]] || { echo "Missing $CP/.env (copy deploy/vps/.env.vps.example)."; exit 1; }
 
 cd "$CP"

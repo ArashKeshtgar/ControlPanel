@@ -9,6 +9,7 @@ its adapter reads the Azure demo.
 internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx, /api -> core-api)   public, own login
                          ├─ rebiomed.<domain>  -> rebiomed-web -> rebiomed-api -> mongo  public demo
                          ├─ english.<domain>   -> lessons-web (static)                  public
+                         ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
                          └─ ledger.<domain>    -> ledgerdashboard                        basic auth
              SQL Server (Express), MongoDB, core-api, adapters: no published ports
@@ -24,6 +25,7 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 | `export-dbs.ps1` | Windows PC | backs up LedgerDashboard and LabFlow for the move |
 | `restore-db.sh` | server | restores `.bak` files and recreates the app logins |
 | `deploy.sh` | server | pull all repos, rebuild, wait for health |
+| `push-context.ps1` | Windows PC | context engine export -> `/srv/portfolio/context` for ctx.<domain> |
 | `backup.sh` | server, nightly | SQL + Mongo + uploads, 14 days kept |
 | `../../.github/workflows/deploy-vps.yml` | GitHub Actions | runs `deploy.sh` after CI passes on main |
 

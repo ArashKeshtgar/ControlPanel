@@ -13,7 +13,8 @@
 #   4. files    JobSearch engine files (facts, templates, scripts) -> server,
 #               after a backup; applications/ and daily/ are left alone
 #   5. deploy   deploy.sh on the server: pull, rebuild containers, health checks
-#   6. migrate  migrate.sh: apply database schema changes
+#   6. migrate  migrate.sh: apply database schema changes, then the context
+#               engine export -> ctx.<domain> (push-context.ps1; -SkipContext)
 #   7. smoke    every public site answers as expected
 param(
     [string]$Server = 'deploy@144.217.4.240',
@@ -23,6 +24,7 @@ param(
     [string[]]$Only,
     [switch]$SkipTests,
     [switch]$SkipJobSearch,
+    [switch]$SkipContext,
     [switch]$DryRun,
     [switch]$Yes
 )
@@ -134,13 +136,15 @@ Step '5/7 Deploy (pull, rebuild, health checks)'
 Remote "$cp/deploy/vps/deploy.sh"
 
 # --- 6. migrate ------------------------------------------------------------
-Step '6/7 Database schema'
+Step '6/7 Database schema + context'
 Remote "$cp/deploy/vps/migrate.sh"
+if ($SkipContext) { Write-Host '  context: skipped (-SkipContext)' -ForegroundColor Yellow }
+else { & (Join-Path $PSScriptRoot 'push-context.ps1') -Server $Server -Domain $Domain -Export }
 
 # --- 7. smoke tests --------------------------------------------------------
 Step '7/7 Smoke tests'
-# Public sites; labflow and ledger sit behind basic auth, so 401 is right.
-$expect = [ordered]@{ panel = 200; rebiomed = 200; english = 200; labflow = 401; ledger = 401 }
+# Public sites; labflow, ledger and ctx sit behind basic auth, so 401 is right.
+$expect = [ordered]@{ panel = 200; rebiomed = 200; english = 200; labflow = 401; ledger = 401; ctx = 401 }
 $failed = @()
 foreach ($site in $expect.Keys) {
     $code = curl.exe -s -o NUL -w '%{http_code}' -m 20 "https://$site.$Domain/"

@@ -29,12 +29,16 @@ services:
       LABFLOW_DOMAIN: ${LABFLOW_DOMAIN:?set LABFLOW_DOMAIN in .env}
       LEDGER_DOMAIN: ${LEDGER_DOMAIN:?set LEDGER_DOMAIN in .env}
       LESSONS_DOMAIN: ${LESSONS_DOMAIN:?set LESSONS_DOMAIN in .env}
+      # Private Context reader; defaults so an older .env keeps deploying.
+      CONTEXT_DOMAIN: ${CONTEXT_DOMAIN:-ctx.arashkeshtgar.ca}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
       - ./deploy/vps/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      # context.json from push-context.ps1 (a folder, so the swap-in rename shows up)
+      - ${CONTEXT_DIR:-/srv/portfolio/context}:/srv/context:ro
     depends_on:
       - frontend
       - rebiomed-web
