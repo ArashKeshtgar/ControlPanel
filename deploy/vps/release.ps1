@@ -4,9 +4,12 @@
 #
 #   .\deploy\vps\release.ps1              # shows the plan, asks, then ships
 #   .\deploy\vps\release.ps1 -DryRun      # only the plan
+#   .\deploy\vps\release.ps1 -PullTruthBank   # bring the dashboard's truth-bank edits to this PC
 #
 # Steps, in order — any failure stops the release before the next one:
-#   1. checks   every repo is on its main branch, nothing uncommitted, not behind GitHub
+#   1. checks   every repo is on its main branch, nothing uncommitted, not behind GitHub;
+#               and the server's truth bank has no commit or edit this PC lacks
+#               (step 4 would overwrite it)
 #   2. tests    LedgerDashboard and Control Panel core-api unit tests
 #   3. push     commits to GitHub, plus a release-<date-time> tag in every repo
 #               (the tag says exactly which version is on the server)
@@ -26,7 +29,9 @@ param(
     [switch]$SkipJobSearch,
     [switch]$SkipContext,
     [switch]$DryRun,
-    [switch]$Yes
+    [switch]$Yes,
+    # Only pull the server's truth-bank commits (dashboard edits) to this PC.
+    [switch]$PullTruthBank
 )
 $ErrorActionPreference = 'Stop'
 $ssh = 'C:\Windows\System32\OpenSSH\ssh.exe'
@@ -60,6 +65,32 @@ function Git([string]$repo) {
     $out
 }
 
+$engine = Join-Path $JobSearch 'engine'
+$serverEngine = '/srv/portfolio/JobSearch/engine'
+
+# -PullTruthBank: fast-forward this PC's truth bank (engine git) to the
+# server's, so edits made in the live dashboard aren't lost by the next
+# release. Only pulls; ships nothing.
+if ($PullTruthBank) {
+    Step 'Pull the truth bank from the server'
+    $dirty = Git $engine status --porcelain --untracked-files=no
+    if ($dirty) { throw "Commit or discard these truth-bank changes on this PC first:`n$($dirty -join "`n")" }
+    $before = (Git $engine rev-parse --short HEAD).Trim()
+    # git reports progress on stderr, which Windows PowerShell turns into a
+    # terminating error under 'Stop' — the exit code decides instead.
+    $ErrorActionPreference = 'Continue'
+    $out = & git.exe -C $engine -c 'core.sshCommand=C:/Windows/System32/OpenSSH/ssh.exe -o BatchMode=yes' `
+        pull --ff-only "${Server}:$serverEngine" master 2>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($code -ne 0) {
+        throw "Couldn't fast-forward: this PC and the server both have new truth-bank commits. Merge them by hand in $engine.`n$out"
+    }
+    Write-Host "  $before -> $((Git $engine rev-parse --short HEAD).Trim())"
+    Git $engine log --oneline "$before..HEAD" | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
+    exit 0
+}
+
 # --- 1. checks -------------------------------------------------------------
 Step '1/7 Checks'
 & $ssh -o BatchMode=yes $Server 'true'
@@ -83,6 +114,42 @@ foreach ($name in $repos.Keys) {
     if ($branch -ne $default) { $problems += "$name is on '$branch', not '$default' (the branch the server builds)." }
     if ($dirty) { $problems += "$name has uncommitted changes:`n$($dirty -join "`n")" }
     if ($behind -gt 0) { $problems += "$name is $behind commit(s) behind GitHub: git pull first." }
+}
+
+# The truth bank is edited in two places: on this PC, and in the live
+# dashboard, which commits every save to the server's engine/.git. Step 4
+# sends this PC's engine files, .git included, over the server's copy — so
+# a commit or an uncommitted edit that exists only on the server would be
+# silently replaced. Refuse instead; -PullTruthBank brings them here first.
+if (-not $SkipJobSearch) {
+    $remote = @(& $ssh -o BatchMode=yes $Server "cd $serverEngine && git log --all --format='%H %ad %s' --date=short && echo '--status--' && git status --porcelain --untracked-files=no")
+    $split = [array]::IndexOf($remote, '--status--')
+    if ($LASTEXITCODE -ne 0 -or $split -lt 0) {
+        $problems += "Couldn't read the truth bank's git history on the server ($serverEngine). Use -SkipJobSearch to ship code only."
+    }
+    else {
+        $serverLog = @(); $serverDirty = @()
+        for ($i = 0; $i -lt $remote.Count; $i++) {
+            if ($i -lt $split) { $serverLog += $remote[$i] } elseif ($i -gt $split -and $remote[$i]) { $serverDirty += $remote[$i] }
+        }
+        $pcCommits = @(Git $engine rev-list --all)
+        $onlyOnServer = @($serverLog | Where-Object { $pcCommits -notcontains ($_ -split ' ')[0] })
+        $pcDirty = @(Git $engine status --porcelain --untracked-files=no)
+
+        $state = if ($onlyOnServer.Count -or $serverDirty.Count) { 'server has changes this PC lacks' } else { 'server has nothing this PC lacks' }
+        Write-Host ("  {0,-23} {1,-8} {2}" -f 'Truth bank (engine)', '', $state)
+        if ($onlyOnServer.Count) {
+            $problems += "The server's truth bank has $($onlyOnServer.Count) commit(s) this PC doesn't (dashboard edits). Sending would overwrite them:`n" +
+                (($onlyOnServer | Select-Object -First 10 | ForEach-Object { '      ' + $_.Substring(0, 8) + $_.Substring(40) }) -join "`n") +
+                "`n    Bring them here first:  .\deploy\vps\release.ps1 -PullTruthBank   (or ship code only with -SkipJobSearch)"
+        }
+        if ($serverDirty.Count) {
+            $problems += "The server's truth bank has uncommitted edits (open the dashboard's Health page and commit them, then -PullTruthBank):`n$($serverDirty -join "`n")"
+        }
+        if ($pcDirty.Count) {
+            $problems += "This PC's truth bank has uncommitted edits; commit them in $engine first:`n$($pcDirty -join "`n")"
+        }
+    }
 }
 if ($problems) { $problems | ForEach-Object { Write-Host "  ✗ $_" -ForegroundColor Red }; throw 'Fix the above, then release again.' }
 
