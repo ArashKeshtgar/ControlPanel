@@ -194,7 +194,10 @@ else {
     & $scp -q $archive "${Server}:/tmp/jobsearch-$tag.tgz"
     if ($LASTEXITCODE -ne 0) { throw 'scp of JobSearch failed.' }
     Remove-Item $archive
-    Remote "tar -xzf /tmp/jobsearch-$tag.tgz -C /srv/portfolio && rm /tmp/jobsearch-$tag.tgz"
+    # engine/.git directories the dashboard container commits into belong to
+    # its uid, not deploy, so tar can't reset their times: leave existing
+    # directories' metadata alone. Windows tar's SCHILY.fflags headers are noise.
+    Remote "tar -xzf /tmp/jobsearch-$tag.tgz -C /srv/portfolio --no-overwrite-dir --warning=no-unknown-keyword && rm /tmp/jobsearch-$tag.tgz"
     Write-Host "  sent (server copy backed up as /srv/backups/jobsearch-before-$tag.tgz)"
 }
 
