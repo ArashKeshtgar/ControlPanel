@@ -31,6 +31,7 @@ services:
       LESSONS_DOMAIN: ${LESSONS_DOMAIN:?set LESSONS_DOMAIN in .env}
       # Private Context reader; defaults so an older .env keeps deploying.
       CONTEXT_DOMAIN: ${CONTEXT_DOMAIN:-ctx.arashkeshtgar.ca}
+      CLINICREPORT_DOMAIN: ${CLINICREPORT_DOMAIN:-report.arashkeshtgar.ca}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
@@ -45,6 +46,7 @@ services:
       - labflow-web
       - ledgerdashboard
       - lessons-web
+      - clinicreport
     restart: unless-stopped
 
   sqlserver:
@@ -124,6 +126,9 @@ services:
     ports: !reset []
 
   lessons-web:
+    ports: !reset []
+
+  clinicreport:
     ports: !reset []
 
 volumes:

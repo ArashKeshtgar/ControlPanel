@@ -1,7 +1,7 @@
 # Running the portfolio on one VPS
 
 Everything that runs as containers on the dev machine (Control Panel, its
-adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons) on a single
+adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons, ClinicReport) on a single
 Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
 its adapter reads the Azure demo.
 
@@ -10,6 +10,7 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
                          ├─ rebiomed.<domain>  -> rebiomed-web -> rebiomed-api -> mongo  public demo
                          ├─ english.<domain>   -> lessons-web (static)                  public
                          ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
+                         ├─ report.<domain>    -> clinicreport (.NET + React, SQLite)   public demo
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
                          └─ ledger.<domain>    -> ledgerdashboard                        basic auth
              SQL Server (Express), MongoDB, core-api, adapters: no published ports

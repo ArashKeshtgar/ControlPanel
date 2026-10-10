@@ -64,6 +64,13 @@
 	}
 }
 
+# ClinicReport: public demo (synthetic data, one-click demo users, nightly
+# reset). Caddy proxies the SignalR WebSocket on /hubs as is.
+{$CLINICREPORT_DOMAIN} {
+	import common
+	reverse_proxy clinicreport:8080
+}
+
 {$LABFLOW_DOMAIN} {
 	import common
 	import private

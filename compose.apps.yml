@@ -209,6 +209,31 @@ services:
       controlpanel.service: lessons-web
       controlpanel.display: "English lessons"
 
+  # ---------------------------------------------------------- ClinicReport --
+  # Structured clinical reporting (github.com/ArashKeshtgar/ClinicReport): one
+  # .NET image that also serves the React app; SQLite in a volume. Runs as the
+  # public demo: synthetic patients, one-click demo users, reset every night.
+  clinicreport:
+    build:
+      context: ${CLINICREPORT_DIR:-../ClinicReport}
+    ports:
+      - "127.0.0.1:${CLINICREPORT_PORT:-5177}:8080"
+    volumes:
+      - clinicreport-data:/data
+    environment:
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      Clinic__Name: "ClinicReport Demo Clinic"
+      Clinic__Address: "Demo only - not a real clinic"
+      Clinic__ReportFooter: "Synthetic demo data. Not for clinical use."
+      Demo__Enabled: "true"
+      # 08:00 UTC = 3-4 AM in Toronto
+      Demo__ResetHourUtc: "8"
+    restart: unless-stopped
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: clinicreport
+      controlpanel.display: "ClinicReport"
+
 networks:
   # internal: MongoDB has no route out and only the ReBiomed API can reach it.
   rebiomed:
@@ -218,3 +243,4 @@ volumes:
   rebiomed-mongo:
   rebiomed-uploads:
   rebiomed-private:
+  clinicreport-data:
