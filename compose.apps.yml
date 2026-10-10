@@ -209,6 +209,27 @@ services:
       controlpanel.service: lessons-web
       controlpanel.display: "English lessons"
 
+  # Review-progress sync between the owner's phone and PC (english.<domain>/api/sync
+  # and ctx.<domain>/api/sync via Caddy). One JSON file and its key in the volume.
+  lessons-sync:
+    build:
+      context: ${LESSONS_DIR:?set LESSONS_DIR in .env (the LanguageLessonDesigner repo folder)}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/lessons/sync.Dockerfile
+    ports:
+      - "127.0.0.1:${LESSONS_SYNC_PORT:-5178}:8080"
+    volumes:
+      - lessons-sync-data:/data
+    restart: unless-stopped
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/sync/health"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: lessons-sync
+      controlpanel.display: "English lessons sync"
+
   # ---------------------------------------------------------- ClinicReport --
   # Structured clinical reporting (github.com/ArashKeshtgar/ClinicReport): one
   # .NET image that also serves the React app; SQLite in a volume. Runs as the
@@ -244,3 +265,4 @@ volumes:
   rebiomed-uploads:
   rebiomed-private:
   clinicreport-data:
+  lessons-sync-data:

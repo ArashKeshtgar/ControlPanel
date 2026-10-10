@@ -40,11 +40,17 @@
 }
 
 # English collocation lessons: public (also on GitHub Pages). Its Context tab
-# finds no /api/context here and says it is local-only.
+# finds no /api/context here and says it is local-only. /api/sync is the
+# review-progress sync (lessons-sync checks its own X-Sync-Key).
 {$LESSONS_DOMAIN} {
 	import common
 	respond /api/context* 404
-	reverse_proxy lessons-web:80
+	handle /api/sync* {
+		reverse_proxy lessons-sync:8080
+	}
+	handle {
+		reverse_proxy lessons-web:80
+	}
 }
 
 # The same lessons app as the owner's private Context reader (the phone's
@@ -58,6 +64,9 @@
 		rewrite * /context.json
 		header Cache-Control no-store
 		file_server
+	}
+	handle /api/sync* {
+		reverse_proxy lessons-sync:8080
 	}
 	handle {
 		reverse_proxy lessons-web:80

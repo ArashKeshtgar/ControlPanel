@@ -46,6 +46,7 @@ services:
       - labflow-web
       - ledgerdashboard
       - lessons-web
+      - lessons-sync
       - clinicreport
     restart: unless-stopped
 
@@ -126,6 +127,9 @@ services:
     ports: !reset []
 
   lessons-web:
+    ports: !reset []
+
+  lessons-sync:
     ports: !reset []
 
   clinicreport:

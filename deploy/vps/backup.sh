@@ -41,8 +41,9 @@ done
 docker compose exec -T rebiomed-mongo mongodump --quiet --archive --gzip > "$OUT/rebiomed-mongo.archive.gz"
 echo "  rebiomed mongo ok"
 
-# Uploaded listing photos and verification documents (named volumes).
-for vol in rebiomed-uploads rebiomed-private; do
+# Uploaded listing photos and verification documents, and the lessons'
+# review progress + sync key (named volumes).
+for vol in rebiomed-uploads rebiomed-private lessons-sync-data; do
   docker run --rm -v "controlpanel_$vol:/data:ro" -v "$OUT:/out" alpine \
     tar -czf "/out/$vol.tar.gz" -C /data .
   echo "  $vol ok"

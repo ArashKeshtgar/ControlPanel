@@ -8,7 +8,7 @@ its adapter reads the Azure demo.
 ```
 internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx, /api -> core-api)   public, own login
                          ├─ rebiomed.<domain>  -> rebiomed-web -> rebiomed-api -> mongo  public demo
-                         ├─ english.<domain>   -> lessons-web (static)                  public
+                         ├─ english.<domain>   -> lessons-web (static) + lessons-sync   public (sync needs its key)
                          ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
                          ├─ report.<domain>    -> clinicreport (.NET + React, SQLite)   public demo
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth

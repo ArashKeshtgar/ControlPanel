@@ -222,6 +222,13 @@ foreach ($site in $expect.Keys) {
     Write-Host ("  {0,-9} {1}  {2}" -f $site, $code, $(if ($ok) { 'ok' } else { "expected $($expect[$site])" }))
     if (-not $ok) { $failed += $site }
 }
+# Review sync: health is open, the data needs the key.
+foreach ($c in @(@('/api/sync/health', 200), @('/api/sync', 401))) {
+    $code = curl.exe -s -o NUL -w '%{http_code}' -m 20 "https://english.$Domain$($c[0])"
+    $ok = [int]$code -eq $c[1]
+    Write-Host ("  {0,-9} {1}  {2}" -f "sync$($c[0].Substring(9))", $code, $(if ($ok) { 'ok' } else { "expected $($c[1])" }))
+    if (-not $ok) { $failed += "english$($c[0])" }
+}
 if ($failed) { throw "Released $tag, but these sites don't answer as expected: $($failed -join ', ')" }
 
 Write-Host "`nReleased $tag." -ForegroundColor Green
