@@ -27,6 +27,10 @@ log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 exec 9>/tmp/portfolio-deploy.lock
 flock 9
 
+# Caddy bind-mounts the Caddyfile as a single file: a pull replaces the file,
+# and the running container keeps the old one until it restarts.
+caddy_before="$(sha1sum "$CP/deploy/vps/Caddyfile" 2>/dev/null || true)"
+
 for name in "${!REPOS[@]}"; do
   dir="$ROOT/$name"
   if [[ -d "$dir/.git" ]]; then
@@ -49,6 +53,10 @@ mkdir -p "$ROOT/context"
 cd "$CP"
 log "Build and start"
 docker compose up -d --build --remove-orphans
+if [[ "$(sha1sum "$CP/deploy/vps/Caddyfile")" != "$caddy_before" ]]; then
+  log "Caddyfile changed: restart caddy"
+  docker compose restart caddy
+fi
 
 # Not `up --wait`: it also waits on the one-shot db-init/seed-users and
 # counts their normal exit as a failure on some Compose versions.
