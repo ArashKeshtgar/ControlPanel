@@ -1,4 +1,4 @@
-# One command to ship everything from this PC to the server: code (every
+﻿# One command to ship everything from this PC to the server: code (every
 # app's front end and back end), database schema, and the JobSearch engine
 # files. Production DATA is never sent: it lives only on the server.
 #
@@ -6,7 +6,7 @@
 #   .\deploy\vps\release.ps1 -DryRun      # only the plan
 #   .\deploy\vps\release.ps1 -PullTruthBank   # bring the dashboard's truth-bank edits to this PC
 #
-# Steps, in order — any failure stops the release before the next one:
+# Steps, in order â€” any failure stops the release before the next one:
 #   1. checks   every repo is on its main branch, nothing uncommitted, not behind GitHub;
 #               and the server's truth bank has no commit or edit this PC lacks
 #               (step 4 would overwrite it)
@@ -22,7 +22,7 @@
 param(
     [string]$Server = 'deploy@144.217.4.240',
     [string]$Domain = 'arashkeshtgar.ca',
-    [string]$JobSearch = 'C:\Users\akesh\Downloads\SmartLedgerAI-JobPrep\JobSearch',
+    [string]$JobSearch = 'D:\E\SmartLedgerAI-JobPrep\JobSearch',
     # Release only some repos, e.g. -Only LedgerDashboard,ControlPanel
     [string[]]$Only,
     [switch]$SkipTests,
@@ -43,7 +43,7 @@ $tag = "release-$stamp"
 # The repos the server builds. Tests: folder (inside the repo) -> command.
 $repos = [ordered]@{
     ControlPanel           = @{ Path = 'D:\E\Projects\ControlPanel'; Tests = @{ 'services\core-api' = 'npm test --silent' } }
-    LedgerDashboard        = @{ Path = 'C:\Users\akesh\Downloads\SmartLedgerAI-JobPrep\LedgerDashboard'; Tests = @{ 'server' = 'npm test --silent' } }
+    LedgerDashboard        = @{ Path = 'D:\E\SmartLedgerAI-JobPrep\LedgerDashboard'; Tests = @{ 'server' = 'npm test --silent' } }
     Rebiomed               = @{ Path = 'D:\E\Projects\mern-animation-project'; Tests = @{} }
     LabFlow                = @{ Path = 'D:\E\Projects\LabFlow'; Tests = @{} }
     LanguageLessonDesigner = @{ Path = 'D:\E\Projects\LanguageLessonDesigner'; Tests = @{} }
@@ -77,7 +77,7 @@ if ($PullTruthBank) {
     if ($dirty) { throw "Commit or discard these truth-bank changes on this PC first:`n$($dirty -join "`n")" }
     $before = (Git $engine rev-parse --short HEAD).Trim()
     # git reports progress on stderr, which Windows PowerShell turns into a
-    # terminating error under 'Stop' — the exit code decides instead.
+    # terminating error under 'Stop' â€” the exit code decides instead.
     $ErrorActionPreference = 'Continue'
     $out = & git.exe -C $engine -c 'core.sshCommand=C:/Windows/System32/OpenSSH/ssh.exe -o BatchMode=yes' `
         pull --ff-only "${Server}:$serverEngine" master 2>&1
@@ -118,7 +118,7 @@ foreach ($name in $repos.Keys) {
 
 # The truth bank is edited in two places: on this PC, and in the live
 # dashboard, which commits every save to the server's engine/.git. Step 4
-# sends this PC's engine files, .git included, over the server's copy — so
+# sends this PC's engine files, .git included, over the server's copy â€” so
 # a commit or an uncommitted edit that exists only on the server would be
 # silently replaced. Refuse instead; -PullTruthBank brings them here first.
 if (-not $SkipJobSearch) {
@@ -151,7 +151,7 @@ if (-not $SkipJobSearch) {
         }
     }
 }
-if ($problems) { $problems | ForEach-Object { Write-Host "  ✗ $_" -ForegroundColor Red }; throw 'Fix the above, then release again.' }
+if ($problems) { $problems | ForEach-Object { Write-Host "  âœ— $_" -ForegroundColor Red }; throw 'Fix the above, then release again.' }
 
 if ($DryRun) { Write-Host "`nDry run: nothing shipped. Would tag $tag." -ForegroundColor Yellow; exit 0 }
 if (-not $Yes -and (Read-Host "`nShip all of this to $Server as $tag? (yes/no)") -ne 'yes') { Write-Host 'Stopped.'; exit 1 }

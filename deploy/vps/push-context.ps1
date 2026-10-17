@@ -1,4 +1,4 @@
-# Sends the context engine's export (context.json) to the server, where Caddy
+﻿# Sends the context engine's export (context.json) to the server, where Caddy
 # serves it only on the private ctx.<domain> site (basic auth). The file never
 # goes into git or a container image. Run on the PC:
 #
@@ -10,7 +10,7 @@
 param(
     [string]$Server = 'deploy@144.217.4.240',
     [string]$Domain = 'arashkeshtgar.ca',
-    [string]$Engine = 'C:\Users\akesh\Downloads\SmartLedgerAI-JobPrep\Context\engine',
+    [string]$Engine = 'D:\E\SmartLedgerAI-JobPrep\Context\engine',
     [switch]$Export
 )
 $ErrorActionPreference = 'Stop'

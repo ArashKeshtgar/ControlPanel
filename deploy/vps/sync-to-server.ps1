@@ -1,4 +1,4 @@
-# Makes the server match this PC: LedgerDashboard's database and the
+﻿# Makes the server match this PC: LedgerDashboard's database and the
 # JobSearch folder are copied PC -> server, replacing what the server has.
 # Run in PowerShell from the ControlPanel folder (Windows ssh.exe, so the
 # ssh-agent key works):
@@ -14,7 +14,7 @@
 # of LedgerDashboard, running this again would throw away server-side work.
 param(
     [string]$Server = 'deploy@144.217.4.240',
-    [string]$JobSearch = 'C:\Users\akesh\Downloads\SmartLedgerAI-JobPrep\JobSearch',
+    [string]$JobSearch = 'D:\E\SmartLedgerAI-JobPrep\JobSearch',
     [switch]$SkipDatabase,
     [switch]$SkipJobSearch,
     [switch]$Yes
