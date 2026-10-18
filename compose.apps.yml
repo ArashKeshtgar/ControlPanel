@@ -255,6 +255,100 @@ services:
       controlpanel.service: clinicreport
       controlpanel.display: "ClinicReport"
 
+  # ---------------------------------------------------------- Analytics --
+  # Reporting and forecasts (github.com/ArashKeshtgar/Analytics): one image for
+  # the API, the scheduler (`analytics schedule`: extract + build + score every
+  # ANALYTICS_RUN_EVERY) and the event consumer, sharing the data volume. The
+  # scheduler builds a copy of the warehouse and swaps it in, so the API keeps
+  # serving the last good run. Sign-in is ClinicHub on the host (the dashboard
+  # is ClinicHub's `analytics` client, redirect http://localhost:5601/...), so
+  # the web port stays 5601. No health information: de-identified by design.
+  analytics-api:
+    build: ${ANALYTICS_DIR:-../Analytics}
+    image: controlpanel-analytics
+    environment: &analytics-env
+      ANALYTICS_HOST: 0.0.0.0
+      ANALYTICS_DATA_DIR: /app/data
+      ANALYTICS_WAREHOUSE_PATH: /app/data/warehouse.duckdb
+      # The issuer as the browser sees it; the keys fetched over the host.
+      ANALYTICS_OIDC_ISSUER: ${ANALYTICS_OIDC_ISSUER:-http://localhost:5301/}
+      ANALYTICS_OIDC_JWKS_URI: ${ANALYTICS_OIDC_JWKS_URI:-http://host.docker.internal:5300/.well-known/jwks}
+      ANALYTICS_WEB_ORIGIN: http://localhost:${ANALYTICS_PORT:-5601}
+      # Read-only login on FinancePowerApp (analytics_reader); empty = no extract, runs fail and say so.
+      ANALYTICS_FINANCE_CONNECTION_STRING: ${ANALYTICS_FINANCE_CONNECTION_STRING:-}
+      ANALYTICS_RABBITMQ_URL: ${ANALYTICS_RABBITMQ_URL:-amqp://guest:guest@host.docker.internal:5672/}
+      ANALYTICS_RUN_EVERY: ${ANALYTICS_RUN_EVERY:-6h}
+    volumes:
+      - analytics-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5600/healthz')"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: analytics-api
+      controlpanel.display: "Analytics API"
+
+  analytics-scheduler:
+    image: controlpanel-analytics
+    command: ["analytics", "schedule"]
+    depends_on:
+      - analytics-api
+    environment: *analytics-env
+    volumes:
+      - analytics-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: analytics-scheduler
+      controlpanel.display: "Analytics scheduler"
+
+  # IntegrationHub's de-identified events (RabbitMQ). Optional:
+  #   docker compose --profile events up -d analytics-consumer
+  analytics-consumer:
+    image: controlpanel-analytics
+    profiles: ["events"]
+    command: ["analytics", "consume"]
+    depends_on:
+      - analytics-api
+    environment: *analytics-env
+    volumes:
+      - analytics-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: analytics-consumer
+      controlpanel.display: "Analytics events"
+
+  analytics-web:
+    build:
+      context: ${ANALYTICS_DIR:-../Analytics}/web
+      args:
+        VITE_OIDC_AUTHORITY: ${ANALYTICS_OIDC_ISSUER:-http://localhost:5301/}
+    depends_on:
+      - analytics-api
+    ports:
+      - "127.0.0.1:${ANALYTICS_PORT:-5601}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: analytics-web
+      controlpanel.display: "Analytics web"
+
 networks:
   # internal: MongoDB has no route out and only the ReBiomed API can reach it.
   rebiomed:
@@ -266,3 +360,4 @@ volumes:
   rebiomed-private:
   clinicreport-data:
   lessons-sync-data:
+  analytics-data:
