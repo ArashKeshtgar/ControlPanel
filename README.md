@@ -40,7 +40,7 @@ Every adapter exposes exactly one contract — `GET /status` returning:
 1. Copy `services/adapters/hisplus-adapter` (DB-read) or `wutility-adapter` (proxy) as a starting point. Each adapter keeps its logic in `src/app.ts` (a `createApp(...)` factory with its dependencies injected) and its wiring in `src/main.ts`, so `/status` can be tested without a real database or upstream API.
 2. Implement `GET /status` for the new project and add an `app.spec.ts` next to it.
 3. `npm install`, run it on the next free port.
-4. Point the project's row at it from the **Manage ports** page. The registry is already seeded with all 9 projects; the ones without an adapter yet show "Offline". If the adapter runs on a new host name, add that host to `ADAPTER_ALLOWED_HOSTS` first (see Security).
+4. Point the project's row at it from the **Manage ports** page. The registry is already seeded with all 17 projects, each with a reserved port (4001–4017); the ones without an adapter yet show "Offline". If the adapter runs on a new host name, add that host to `ADAPTER_ALLOWED_HOSTS` first (see Security).
 
 No changes to `core-api` or the frontend are ever needed to add a project — that's the aggregation pattern doing its job.
 
@@ -112,8 +112,10 @@ The Docker-specific code is one class, `DockerOrchestrator`, behind an `Orchestr
 | `ledgerdashboard` | LedgerDashboard (job-search tracker) | Built from its repo (`LEDGERDASH_DIR`), JobSearch folder mounted, its own `server/.env` for the database and Anthropic credentials, SQL Server on the host, password login |
 | `rebiomed-api`, `rebiomed-web` | ReBiomed (used medical-equipment marketplace, Express + React) | Own MongoDB (`rebiomed-mongo`) on an internal network only the API joins; nginx serves the React build and proxies `/api` and `/uploads`; uploads in volumes; demo listings with `docker compose --profile seed run --rm rebiomed-seed`; Stripe keys optional |
 | `labflow-api`, `labflow-web` | LabFlow (Ontario lab system, ASP.NET Core + React) | The `LabFlow` database on the host SQL Server through its own `labflow_svc` login ([`deploy/labflow/sql-login.sql`](deploy/labflow/sql-login.sql): read/write, sequence use, the audit schema append-only). Runs as Development, the only mode with LabFlow's demo sign-in, which is why it must stay on 127.0.0.1 |
+| `lessons-web`, `lessons-sync` | English lessons (LanguageLessonDesigner, static Vue build) | nginx serves the build (`LESSONS_DIR`); `lessons-sync` keeps the review progress of the phone and the PC in one JSON file in a volume, checked with its own key |
+| `clinicreport` | ClinicReport (structured echo/ECG reports, .NET + React) | One image from its repo (`CLINICREPORT_DIR`, default `../ClinicReport`), SQLite in a volume, run as the public demo: synthetic patients, one-click demo users, reset every night |
 
-ReBiomed and LabFlow are still being developed, so their Dockerfiles live here in [`deploy/`](deploy/) (with per-Dockerfile `.dockerignore` files) and build from each repo's working folder (`REBIOMED_DIR`, `LABFLOW_DIR`, `DEPLOY_DIR`); they can move into the app repos once those settle. After LabFlow's `database/deploy.ps1 -Recreate`, run `sql-login.sql` again: dropping the database drops its user.
+ReBiomed, LabFlow and the English lessons are still being developed, so their Dockerfiles live here in [`deploy/`](deploy/) (with per-Dockerfile `.dockerignore` files) and build from each repo's working folder (`REBIOMED_DIR`, `LABFLOW_DIR`, `LESSONS_DIR`, `DEPLOY_DIR`); they can move into the app repos once those settle. After LabFlow's `database/deploy.ps1 -Recreate`, run `sql-login.sql` again: dropping the database drops its user.
 
 wUtility Web's API is deliberately not containerized: it syncs SQL Server databases through connection strings that use Windows authentication, which a Linux container can't do.
 
@@ -141,7 +143,7 @@ Everything needed to create them is in [`db/`](db/). Every script is safe to re-
 | `01-databases.sql` | Creates `ControlPanelDb` and `HisPlusDemo` |
 | `02-service-login.sql` | Creates or updates the `controlpanel_svc` login and its least-privilege roles (needs `DB_PASSWORD`) |
 | `03-controlpanel-schema.sql` | `Users`, `Projects` and `AuditLog` tables, plus column migrations for existing databases |
-| `04-controlpanel-seed.sql` | The 9-project registry (existing rows are never overwritten) |
+| `04-controlpanel-seed.sql` | The 17-project registry (existing rows are never overwritten; re-running it adds new projects) |
 | `05-hisplus-demo.sql` | The `ORReports` table and a few demo rows |
 
 ## Running via Docker Compose (recommended)
@@ -195,5 +197,5 @@ CI runs all of them, plus the production builds and all five Docker images, on e
 ## What's deliberately not built (yet)
 
 - Message-queue-based async status push (RabbitMQ) — for a status dashboard, synchronous REST composition with a short per-adapter timeout is simpler and equally correct; there's no async workflow here that would benefit from a queue.
-- The remaining 6 adapters — same two patterns, not yet built for the other 6 projects.
+- The remaining 14 adapters — same two patterns, not yet built for the other 14 projects. The next useful ones: ClinicReport, ClinicHub and PharmaFlow (proxy over their `/healthz`), FinancePowerApp and LabFlow (DB-read: inbox documents waiting for mapping, open receivables; today's requisitions, unreleased results).
 - Status history and a daily AI digest — the assistant sees live status only; storing snapshots would let it answer "what changed since yesterday?".

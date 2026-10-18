@@ -40,8 +40,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 
 ## 2. Domain and DNS
 
-Five A records, all to the server's IPv4 (and AAAA if it has IPv6):
-`panel`, `rebiomed`, `english`, `labflow`, `ledger`. Caddy can only get certificates once
+Seven A records, all to the server's IPv4 (and AAAA if it has IPv6):
+`panel`, `rebiomed`, `english`, `ctx`, `report`, `labflow`, `ledger`. Caddy can only get certificates once
 these resolve, so do this early.
 
 ## 3. Bootstrap
@@ -71,6 +71,7 @@ git clone https://github.com/ArashKeshtgar/LedgerDashboard.git
 git clone https://github.com/ArashKeshtgar/Rebiomed.git
 git clone https://github.com/ArashKeshtgar/LabFlow.git
 git clone https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
+git clone https://github.com/ArashKeshtgar/ClinicReport.git
 
 cd ControlPanel
 deploy/vps/make-env.sh <your-domain> <your-email>
@@ -85,7 +86,7 @@ optional: `ANTHROPIC_API_KEY` and ReBiomed's Stripe test keys.
 The JobSearch folder isn't in git. From the PC (PowerShell):
 
 ```powershell
-scp -r C:\Users\akesh\Downloads\SmartLedgerAI-JobPrep\JobSearch deploy@<server-ip>:/srv/portfolio/
+scp -r D:\E\SmartLedgerAI-JobPrep\JobSearch deploy@<server-ip>:/srv/portfolio/
 ```
 
 ## 5. Databases

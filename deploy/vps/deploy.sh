@@ -10,16 +10,15 @@ set -euo pipefail
 
 ROOT="${PORTFOLIO_ROOT:-/srv/portfolio}"
 CP="$ROOT/ControlPanel"
-# folder -> clone URL. LabFlow's URL comes from .env until it has a GitHub repo.
+# folder -> clone URL.
 declare -A REPOS=(
   [ControlPanel]=https://github.com/ArashKeshtgar/ControlPanel.git
   [LedgerDashboard]=https://github.com/ArashKeshtgar/LedgerDashboard.git
   [Rebiomed]=https://github.com/ArashKeshtgar/Rebiomed.git
   [LanguageLessonDesigner]=https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
   [ClinicReport]=https://github.com/ArashKeshtgar/ClinicReport.git
+  [LabFlow]=https://github.com/ArashKeshtgar/LabFlow.git
 )
-LABFLOW_REPO="$(grep -E '^LABFLOW_REPO=' "$CP/.env" 2>/dev/null | cut -d= -f2- || true)"
-[[ -n "$LABFLOW_REPO" ]] && REPOS[LabFlow]="$LABFLOW_REPO"
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 

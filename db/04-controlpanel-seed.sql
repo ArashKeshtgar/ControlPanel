@@ -1,5 +1,6 @@
--- Seeds the project registry: all 9 portfolio projects. Only HIS+ and
--- wUtility have adapters so far; the rest show "Offline" until theirs exist.
+-- Seeds the project registry: every portfolio project. Only HIS+, wUtility
+-- and LedgerDashboard have adapters so far; the rest show "Offline" until
+-- theirs exist, on the port listed here.
 -- Existing rows are left untouched, so this never overwrites edits made on
 -- the Manage ports page.
 --
@@ -23,7 +24,15 @@ USING (VALUES
     (N'ledgerdash',     N'LedgerDashboard',       N'Career',   N'http://$(LEDGERDASH_ADAPTER)'),
     (N'english-engine', N'English Engine',        N'Career',   N'http://$(ADAPTER_HOST):4007'),
     (N'dbaops',         N'DbaOpsConsole',         N'Other',    N'http://$(ADAPTER_HOST):4008'),
-    (N'mern',           N'mern-animation-project', N'Other',   N'http://$(ADAPTER_HOST):4009')
+    (N'mern',           N'mern-animation-project', N'Other',   N'http://$(ADAPTER_HOST):4009'),
+    (N'rebiomed',       N'ReBiomed',              N'Other',    N'http://$(ADAPTER_HOST):4010'),
+    (N'english-lessons', N'English lessons',      N'Career',   N'http://$(ADAPTER_HOST):4011'),
+    (N'clinichub',      N'ClinicHub',             N'ClinicHub platform', N'http://$(ADAPTER_HOST):4012'),
+    (N'labflow',        N'LabFlow',               N'ClinicHub platform', N'http://$(ADAPTER_HOST):4013'),
+    (N'clinicreport',   N'ClinicReport',          N'ClinicHub platform', N'http://$(ADAPTER_HOST):4014'),
+    (N'pharmaflow',     N'PharmaFlow',            N'ClinicHub platform', N'http://$(ADAPTER_HOST):4015'),
+    (N'finance',        N'FinancePowerApp',       N'ClinicHub platform', N'http://$(ADAPTER_HOST):4016'),
+    (N'taxireceipt',    N'TaxiReceipt',           N'Other',    N'http://$(ADAPTER_HOST):4017')
 ) AS source ([Key], DisplayName, Category, AdapterBaseUrl)
 ON target.[Key] = source.[Key]
 WHEN NOT MATCHED THEN

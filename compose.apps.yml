@@ -250,6 +250,13 @@ services:
       # 08:00 UTC = 3-4 AM in Toronto
       Demo__ResetHourUtc: "8"
     restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      # The aspnet image has no curl or wget; bash can speak HTTP/1.0.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
     labels:
       controlpanel.managed: "true"
       controlpanel.service: clinicreport
