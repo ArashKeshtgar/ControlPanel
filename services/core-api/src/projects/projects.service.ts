@@ -136,7 +136,10 @@ export class ProjectsService {
   // ledgerdash-adapter's /insights/*), for the assistant. Only paths on this
   // list can be requested, and they go through the same allowlist and
   // timeout as /status.
-  static readonly ADAPTER_READ_PATHS = new Set(['/insights/followups', '/insights/funnel', '/insights/gaps']);
+  static readonly ADAPTER_READ_PATHS = new Set([
+    '/insights/followups', '/insights/funnel', '/insights/gaps',
+    '/insights/needs-mapping', '/insights/aging',
+  ]);
 
   async fetchAdapterJson(key: string, path: string): Promise<unknown> {
     if (!ProjectsService.ADAPTER_READ_PATHS.has(path)) throw new BadRequestException(`Path not allowed: ${path}`);

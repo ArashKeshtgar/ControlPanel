@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ProjectsService } from '../projects/projects.service';
 
-// The assistant's entire reach: three read-only tools over data core-api
+// The assistant's entire reach: four read-only tools over data core-api
 // already serves. No tool writes, runs SQL, or takes a URL — so whatever a
 // tool result contains (a company name, a posting title, an adapter error),
 // the worst a model can do with it is answer badly, never act on it.
@@ -42,6 +42,22 @@ export const ASSISTANT_TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
     },
     strict: true,
   },
+  {
+    name: 'get_finance_insight',
+    description:
+      "Read the clinic group's accounting (FinancePowerApp). " +
+      "'needs-mapping': financial documents the applications sent that wait for a person, oldest first: " +
+      'NeedsMapping (a category with no posting map yet) or Rejected, with the source application, kind, reference, ' +
+      'date, total and the reason. ' +
+      "'aging': open receivables by payer type (OHIP, ODB, insurers, patients...) in age buckets by due date.",
+    input_schema: {
+      type: 'object',
+      properties: { kind: { type: 'string', enum: ['needs-mapping', 'aging'] } },
+      required: ['kind'],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
 ];
 
 // Runs one tool call. Returns the JSON the model sees; throws on bad input
@@ -77,6 +93,11 @@ export async function runAssistantTool(
       const kind = String(input.kind ?? '');
       if (!['followups', 'funnel', 'gaps'].includes(kind)) throw new Error(`Unknown insight kind '${kind}'.`);
       return JSON.stringify(await projects.fetchAdapterJson('ledgerdash', `/insights/${kind}`));
+    }
+    case 'get_finance_insight': {
+      const kind = String(input.kind ?? '');
+      if (!['needs-mapping', 'aging'].includes(kind)) throw new Error(`Unknown insight kind '${kind}'.`);
+      return JSON.stringify(await projects.fetchAdapterJson('finance', `/insights/${kind}`));
     }
     default:
       throw new Error(`Unknown tool '${name}'.`);

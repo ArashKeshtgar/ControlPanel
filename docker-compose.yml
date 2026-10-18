@@ -117,7 +117,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # localhost: the not-yet-built adapters are seeded as localhost:40xx and
       # simply show "unreachable" until they exist.
-      ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter,ledgerdash-adapter
+      ADAPTER_ALLOWED_HOSTS: localhost,wutility-adapter,hisplus-adapter,ledgerdash-adapter,rebiomed-adapter,lessons-adapter,clinichub-adapter,labflow-adapter,clinicreport-adapter,pharmaflow-adapter,finance-adapter
       DOCKER_PROXY_URL: http://socket-proxy:2375
       CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-4100}
 

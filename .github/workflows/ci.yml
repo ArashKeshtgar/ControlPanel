@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        adapter: [wutility-adapter, hisplus-adapter, ledgerdash-adapter]
+        adapter: [wutility-adapter, hisplus-adapter, ledgerdash-adapter, probe-adapter, labflow-adapter, finance-adapter]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -94,6 +94,27 @@ jobs:
           context: services/adapters/ledgerdash-adapter
           push: false
           tags: control-panel-ledgerdash-adapter:ci
+
+      - name: Build probe-adapter image
+        uses: docker/build-push-action@v7
+        with:
+          context: services/adapters/probe-adapter
+          push: false
+          tags: control-panel-probe-adapter:ci
+
+      - name: Build labflow-adapter image
+        uses: docker/build-push-action@v7
+        with:
+          context: services/adapters/labflow-adapter
+          push: false
+          tags: control-panel-labflow-adapter:ci
+
+      - name: Build finance-adapter image
+        uses: docker/build-push-action@v7
+        with:
+          context: services/adapters/finance-adapter
+          push: false
+          tags: control-panel-finance-adapter:ci
 
       - name: Build frontend image
         uses: docker/build-push-action@v7
