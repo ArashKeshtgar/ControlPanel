@@ -2,7 +2,7 @@
 
 Everything that runs as containers on the dev machine (Control Panel, its
 adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons, ClinicReport,
-FinancePowerApp, PharmaFlow) on a single Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
+FinancePowerApp, PharmaFlow, ClinicHub) on a single Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
 its adapter reads the Azure demo.
 
 ```
@@ -11,6 +11,7 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
                          ├─ english.<domain>   -> lessons-web (static) + lessons-sync   public (sync needs its key)
                          ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
                          ├─ report.<domain>    -> clinicreport (.NET + React, SQLite)   public demo
+                         ├─ hub.<domain>       -> clinichub (.NET + React, SQL Server)  public demo
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
                          ├─ finance.<domain>   -> finance-web -> finance-api            basic auth
                          ├─ pharmacy.<domain>  -> pharmaflow-web -> pharmaflow-api      basic auth
@@ -27,7 +28,7 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 | `make-env.sh` | server, once | fills both `.env` files with generated secrets |
 | `export-dbs.ps1` | Windows PC | backs up LedgerDashboard and LabFlow for the move |
 | `restore-db.sh` | server | restores `.bak` files and recreates the app logins |
-| `app-db-init.sh` | server (one-shot `app-db-init` container, every `up`) | creates and upgrades the FinancePowerApp and PharmaFlow demo databases from their repos' scripts, and the app and adapter logins |
+| `app-db-init.sh` | server (one-shot `app-db-init` container, every `up`) | creates and upgrades the FinancePowerApp and PharmaFlow demo databases from their repos' scripts, and the app and adapter logins (ClinicHub's included; ClinicHub then creates its own databases) |
 | `env-add-missing.sh` | server (run by `deploy.sh`) | adds settings new in `.env.vps.example` to an existing `.env`, generating new passwords |
 | `deploy.sh` | server | pull all repos, rebuild, wait for health |
 | `push-context.ps1` | Windows PC | context engine export -> `/srv/portfolio/context` for ctx.<domain> |
@@ -44,8 +45,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 
 ## 2. Domain and DNS
 
-Nine A records, all to the server's IPv4 (and AAAA if it has IPv6):
-`panel`, `rebiomed`, `english`, `ctx`, `report`, `labflow`, `finance`, `pharmacy`, `ledger`. Caddy can only get certificates once
+Ten A records, all to the server's IPv4 (and AAAA if it has IPv6):
+`panel`, `rebiomed`, `english`, `ctx`, `report`, `hub`, `labflow`, `finance`, `pharmacy`, `ledger`. Caddy can only get certificates once
 these resolve, so do this early.
 
 ## 3. Bootstrap
@@ -78,6 +79,7 @@ git clone https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
 git clone https://github.com/ArashKeshtgar/ClinicReport.git
 git clone https://github.com/ArashKeshtgar/FinancePowerApp.git
 git clone https://github.com/ArashKeshtgar/Drugstore.git
+git clone https://github.com/ArashKeshtgar/ClinicHub.git
 
 cd ControlPanel
 deploy/vps/make-env.sh <your-domain> <your-email>
@@ -121,6 +123,10 @@ Control Panel's own databases (ControlPanelDb, HisPlusDemo) are created by
 synthetic demo data (the same scripts and the same migrations table as the
 repo's `deploy.ps1`, so a pulled new script is applied on the next deploy).
 This FinancePowerApp is a demo copy, not the Power App's Azure database.
+ClinicHub creates `ClinicHub_Catalog` and one database per demo clinic itself
+on its first start (about a minute), as `clinichub_svc`; the nightly backup
+picks up every `ClinicHub_*` database and the `clinichub-data` volume (its
+keys: without them two-factor secrets can't be read again).
 
 ## 6. First deploy
 

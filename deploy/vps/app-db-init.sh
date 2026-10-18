@@ -1,7 +1,7 @@
 #!/bin/bash
 # Creates and upgrades FinancePowerApp's and PharmaFlow's databases in the
-# container SQL Server, then (re)creates their logins and LabFlow's
-# read-only adapter login. Run by the one-shot app-db-init service in
+# container SQL Server, then (re)creates their logins, LabFlow's read-only
+# adapter login and ClinicHub's (which creates its own databases). Run by the one-shot app-db-init service in
 # compose.vps.yml on every `docker compose up`, so a new server gets both
 # demos without a manual step and a pull that adds a script applies it.
 #
@@ -19,6 +19,7 @@ SQLCMD=/opt/mssql-tools18/bin/sqlcmd
 : "${FINANCE_READER_PASSWORD:?FINANCE_READER_PASSWORD is required}"
 : "${PHARMAFLOW_DB_PASSWORD:?PHARMAFLOW_DB_PASSWORD is required}"
 : "${LABFLOW_READER_PASSWORD:?LABFLOW_READER_PASSWORD is required}"
+: "${CLINICHUB_DB_PASSWORD:?CLINICHUB_DB_PASSWORD is required}"
 
 sql() { "$SQLCMD" -C -b -S sqlserver -U sa -P "$SA_PASSWORD" -I -f 65001 "$@"; }
 
@@ -46,6 +47,7 @@ migrate PharmaFlow SchemaMigration /apps/pharmaflow
 sql -i /deploy/finance/sql-login.sql \
   -v FINANCE_DB_PASSWORD="$FINANCE_DB_PASSWORD" -v FINANCE_READER_PASSWORD="$FINANCE_READER_PASSWORD" >/dev/null
 sql -i /deploy/pharmaflow/sql-login.sql -v PHARMAFLOW_DB_PASSWORD="$PHARMAFLOW_DB_PASSWORD" >/dev/null
+sql -i /deploy/clinichub/sql-login.sql -v CLINICHUB_DB_PASSWORD="$CLINICHUB_DB_PASSWORD" >/dev/null
 
 # LabFlow's database comes from a backup (restore-db.sh); until it's there,
 # there's nothing to grant on.

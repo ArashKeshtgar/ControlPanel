@@ -361,6 +361,43 @@ services:
       controlpanel.service: pharmaflow-web
       controlpanel.display: "PharmaFlow web"
 
+  # ------------------------------------------------------------- ClinicHub --
+  # The clinic platform (patients, booking, visits, OHIP billing), built from
+  # its own repo's Dockerfile: API and React app in one image. With the demo
+  # on, two synthetic clinics and one-click sign-in. It creates its catalog
+  # and clinic databases itself through clinichub_svc
+  # (deploy/clinichub/sql-login.sql). On this machine under their own
+  # ClinicHubDocker_ names, so the `dotnet run` copy's ClinicHub_ databases
+  # (owned by your Windows login, with their own keys and outbox) are left
+  # alone. Not connected to LabFlow, ClinicReport or FinancePowerApp yet:
+  # orders and financial documents wait in its outbox.
+  clinichub:
+    build:
+      context: ${CLINICHUB_DIR:-../ClinicHub}
+    environment:
+      Demo__Enabled: "true"
+      Clinics__DatabasePrefix: ClinicHubDocker_
+      ConnectionStrings__Catalog: "Server=host.docker.internal,1433;Database=ClinicHubDocker_Catalog;User Id=clinichub_svc;Password=${CLINICHUB_DB_PASSWORD:?set CLINICHUB_DB_PASSWORD in .env (deploy/clinichub/sql-login.sql)};TrustServerCertificate=True"
+      ConnectionStrings__ClinicServer: "Server=host.docker.internal,1433;User Id=clinichub_svc;Password=${CLINICHUB_DB_PASSWORD};TrustServerCertificate=True"
+    volumes:
+      - clinichub-data:/data
+    ports:
+      - "127.0.0.1:${CLINICHUB_PORT:-5300}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      # First start creates and seeds the catalog and two clinic databases.
+      start_period: 120s
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: clinichub
+      controlpanel.display: "ClinicHub"
+
   # -------------------------------------------------------------- Adapters --
   # One per app above, so the dashboard and the assistant see them. Not
   # published: core-api reaches them on the compose network, and the registry
@@ -398,16 +435,12 @@ services:
       controlpanel.service: lessons-adapter
       controlpanel.display: "English lessons adapter"
 
-  # ClinicHub isn't containerized yet: on the dev machine it runs with
-  # `dotnet run` on the host (:5300). Elsewhere it shows as unreachable.
   clinichub-adapter:
     build: ./services/adapters/probe-adapter
     environment:
       APP_NAME: ClinicHub
-      PROBES: api=${CLINICHUB_HEALTH_URL:-http://host.docker.internal:5300/healthz}
+      PROBES: app=http://clinichub:8080/healthz
       PORT: "4012"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck: *adapter-health
     labels:
@@ -483,4 +516,5 @@ volumes:
   rebiomed-uploads:
   rebiomed-private:
   clinicreport-data:
+  clinichub-data:
   lessons-sync-data:

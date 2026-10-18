@@ -7,17 +7,19 @@
 #   .\deploy\local-setup.ps1 -ProjectsDir D:\E\Projects -Server .
 #
 # What it does:
-#   1. .env: adds FINANCE_DIR, PHARMAFLOW_DIR, DEPLOY_DIR and the new SQL
-#      passwords if they're missing (passwords generated here, letters and
-#      digits only, like make-env.sh on the server). The repo folders
-#      default to <ProjectsDir>\FinancePowerApp and <ProjectsDir>\Drugstore,
-#      and are cloned from GitHub if they aren't there.
+#   1. .env: adds FINANCE_DIR, PHARMAFLOW_DIR, CLINICHUB_DIR, DEPLOY_DIR and
+#      the new SQL passwords if they're missing (passwords generated here,
+#      letters and digits only, like make-env.sh on the server). The repo
+#      folders default to <ProjectsDir>\FinancePowerApp, \Drugstore and
+#      \ClinicHub, and are cloned from GitHub if they aren't there.
 #   2. Databases: FinancePowerApp and PharmaFlow are created with each repo's
 #      own database\deploy.ps1 when they don't exist yet. An existing one is
 #      left alone (FinancePowerApp's deploy.ps1 upgrades the Power App's
 #      database in place: run it yourself, after a backup, when you want that).
-#   3. Logins: finance_svc, finance_reader, pharmaflow_svc and, if LabFlow's
-#      database exists, labflow_reader, with the passwords from .env.
+#   3. Logins: finance_svc, finance_reader, pharmaflow_svc, clinichub_svc
+#      (which creates ClinicHub's ClinicHubDocker_ databases itself on first
+#      start) and, if LabFlow's database exists, labflow_reader, with the
+#      passwords from .env.
 # Windows authentication to the local SQL Server; no admin rights needed
 # beyond what creating logins on it needs.
 param(
@@ -78,6 +80,7 @@ $envValues = Read-Env
 $repos = [ordered]@{
     FINANCE_DIR    = @{ Folder = 'FinancePowerApp'; Url = 'https://github.com/ArashKeshtgar/FinancePowerApp.git' }
     PHARMAFLOW_DIR = @{ Folder = 'Drugstore'; Url = 'https://github.com/ArashKeshtgar/Drugstore.git' }
+    CLINICHUB_DIR  = @{ Folder = 'ClinicHub'; Url = 'https://github.com/ArashKeshtgar/ClinicHub.git' }
 }
 foreach ($key in $repos.Keys) {
     if ($envValues[$key]) { continue }
@@ -90,7 +93,7 @@ foreach ($key in $repos.Keys) {
     Add-EnvValue $key $dir
 }
 if (-not $envValues['DEPLOY_DIR']) { Add-EnvValue 'DEPLOY_DIR' (Join-Path $root 'deploy') }
-foreach ($key in 'FINANCE_DB_PASSWORD', 'FINANCE_READER_PASSWORD', 'PHARMAFLOW_DB_PASSWORD', 'LABFLOW_READER_PASSWORD') {
+foreach ($key in 'FINANCE_DB_PASSWORD', 'FINANCE_READER_PASSWORD', 'PHARMAFLOW_DB_PASSWORD', 'LABFLOW_READER_PASSWORD', 'CLINICHUB_DB_PASSWORD') {
     if (-not $envValues[$key]) { Add-EnvValue $key (New-SqlPassword) }
 }
 $envValues = Read-Env
@@ -119,6 +122,8 @@ Invoke-SqlFile (Join-Path $deployDir 'finance\sql-login.sql') @(
 Write-Host '  finance_svc, finance_reader'
 Invoke-SqlFile (Join-Path $deployDir 'pharmaflow\sql-login.sql') @("PHARMAFLOW_DB_PASSWORD=$($envValues['PHARMAFLOW_DB_PASSWORD'])")
 Write-Host '  pharmaflow_svc'
+Invoke-SqlFile (Join-Path $deployDir 'clinichub\sql-login.sql') @("CLINICHUB_DB_PASSWORD=$($envValues['CLINICHUB_DB_PASSWORD'])")
+Write-Host '  clinichub_svc'
 if (Test-Database 'LabFlow') {
     Invoke-SqlFile (Join-Path $deployDir 'labflow\reader-login.sql') @("LABFLOW_READER_PASSWORD=$($envValues['LABFLOW_READER_PASSWORD'])")
     Write-Host '  labflow_reader'

@@ -17,6 +17,8 @@
 #                    labflow_reader (LABFLOW_READER_PASSWORD in this repo's .env)
 #   FinancePowerApp: finance_svc, finance_reader (FINANCE_*_PASSWORD)
 #   PharmaFlow:      pharmaflow_svc (PHARMAFLOW_DB_PASSWORD)
+#   ClinicHub_*:     owned by clinichub_svc, which created them (app-db-init
+#                    makes the login; the owner is set back to it here)
 # (The last two are normally created from scripts by app-db-init, not
 # restored; this is for bringing back a nightly backup.)
 set -euo pipefail
@@ -86,6 +88,9 @@ restore_one() {
       run_sql_file deploy/finance/sql-login.sql \
         -v "FINANCE_DB_PASSWORD=$(env_val FINANCE_DB_PASSWORD .env)" "FINANCE_READER_PASSWORD=$(env_val FINANCE_READER_PASSWORD .env)"
       ;;
+    ClinicHub_*)
+      sql "ALTER AUTHORIZATION ON DATABASE::[$db] TO clinichub_svc;" >/dev/null
+      ;;
     PharmaFlow)
       sql "USE [PharmaFlow]; DROP USER IF EXISTS pharmaflow_svc;" >/dev/null
       run_sql_file deploy/pharmaflow/sql-login.sql -v "PHARMAFLOW_DB_PASSWORD=$(env_val PHARMAFLOW_DB_PASSWORD .env)"
@@ -104,7 +109,7 @@ for f in "${files[@]}"; do restore_one "$f"; done
 
 # Whatever was connected to the old copies reconnects to the new ones.
 running="$(docker compose ps --services --status running)"
-for svc in ledgerdashboard ledgerdash-adapter labflow-api labflow-adapter finance-api finance-adapter pharmaflow-api; do
+for svc in ledgerdashboard ledgerdash-adapter labflow-api labflow-adapter finance-api finance-adapter pharmaflow-api clinichub; do
   if grep -qx "$svc" <<<"$running"; then docker compose restart "$svc"; fi
 done
 echo "Done."

@@ -25,6 +25,12 @@ sql() {
     '/opt/mssql-tools18/bin/sqlcmd -C -b -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -h -1 -Q "$1"' _ "$1"
 }
 
+# ClinicHub makes a database per clinic (ClinicHub_Catalog, ClinicHub_<clinic>).
+while IFS= read -r db; do
+  db="$(tr -d '[:space:]' <<<"$db")"
+  [[ "$db" =~ ^ClinicHub_[A-Za-z0-9_]+$ ]] && DATABASES+=("$db")
+done < <(sql "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name LIKE N'ClinicHub[_]%'")
+
 for db in "${DATABASES[@]}"; do
   if [[ -z "$(sql "SET NOCOUNT ON; SELECT name FROM sys.databases WHERE name = N'$db'" | tr -d '[:space:]')" ]]; then
     echo "  skip $db (not on this server)"
@@ -41,9 +47,10 @@ done
 docker compose exec -T rebiomed-mongo mongodump --quiet --archive --gzip > "$OUT/rebiomed-mongo.archive.gz"
 echo "  rebiomed mongo ok"
 
-# Uploaded listing photos and verification documents, and the lessons'
-# review progress + sync key (named volumes).
-for vol in rebiomed-uploads rebiomed-private lessons-sync-data; do
+# Uploaded listing photos and verification documents, the lessons' review
+# progress + sync key, and ClinicHub's data-protection keys and token-signing
+# certificate (named volumes).
+for vol in rebiomed-uploads rebiomed-private lessons-sync-data clinichub-data; do
   docker run --rm -v "controlpanel_$vol:/data:ro" -v "$OUT:/out" alpine \
     tar -czf "/out/$vol.tar.gz" -C /data .
   echo "  $vol ok"

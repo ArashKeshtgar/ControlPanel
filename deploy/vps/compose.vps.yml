@@ -13,7 +13,7 @@
 #   - LedgerDashboard's and LabFlow's databases live in the container SQL
 #     Server (restored from backups by restore-db.sh) instead of on the host.
 #     FinancePowerApp's and PharmaFlow's are created there from their repos'
-#     scripts, with demo data, by app-db-init.
+#     scripts, with demo data, by app-db-init; ClinicHub creates its own.
 #   - SQL Server runs as Express: the Developer edition isn't licensed for
 #     anything the public can reach.
 #   - wutility-adapter reads the wUtility Web demo on Azure.
@@ -36,6 +36,7 @@ services:
       CLINICREPORT_DOMAIN: ${CLINICREPORT_DOMAIN:-report.arashkeshtgar.ca}
       FINANCE_DOMAIN: ${FINANCE_DOMAIN:-finance.arashkeshtgar.ca}
       PHARMACY_DOMAIN: ${PHARMACY_DOMAIN:-pharmacy.arashkeshtgar.ca}
+      HUB_DOMAIN: ${HUB_DOMAIN:-hub.arashkeshtgar.ca}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
@@ -54,6 +55,7 @@ services:
       - clinicreport
       - finance-web
       - pharmaflow-web
+      - clinichub
     restart: unless-stopped
 
   sqlserver:
@@ -155,6 +157,7 @@ services:
       FINANCE_READER_PASSWORD: ${FINANCE_READER_PASSWORD:?set FINANCE_READER_PASSWORD in .env}
       PHARMAFLOW_DB_PASSWORD: ${PHARMAFLOW_DB_PASSWORD:?set PHARMAFLOW_DB_PASSWORD in .env}
       LABFLOW_READER_PASSWORD: ${LABFLOW_READER_PASSWORD:?set LABFLOW_READER_PASSWORD in .env}
+      CLINICHUB_DB_PASSWORD: ${CLINICHUB_DB_PASSWORD:?set CLINICHUB_DB_PASSWORD in .env}
     volumes:
       - ./deploy:/deploy:ro
       - ${FINANCE_DIR}/database:/apps/finance:ro
@@ -183,6 +186,23 @@ services:
 
   pharmaflow-web:
     ports: !reset []
+
+  # Public demo at hub.<domain>, like ClinicReport: synthetic clinics,
+  # one-click sign-in, accounts and clinics locked so visitors (every one an
+  # administrator) can't change them. Production, so its sign-in server only
+  # answers over HTTPS (Caddy). Its databases keep the ClinicHub_ names.
+  clinichub:
+    ports: !reset []
+    depends_on:
+      app-db-init:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      Demo__LockAccounts: "true"
+      Sso__Issuer: https://${HUB_DOMAIN:-hub.arashkeshtgar.ca}/
+      Clinics__DatabasePrefix: ClinicHub_
+      ConnectionStrings__Catalog: "Server=sqlserver,1433;Database=ClinicHub_Catalog;User Id=clinichub_svc;Password=${CLINICHUB_DB_PASSWORD};TrustServerCertificate=True"
+      ConnectionStrings__ClinicServer: "Server=sqlserver,1433;User Id=clinichub_svc;Password=${CLINICHUB_DB_PASSWORD};TrustServerCertificate=True"
 
   labflow-adapter:
     depends_on:

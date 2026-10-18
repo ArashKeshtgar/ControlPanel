@@ -87,6 +87,13 @@
 	reverse_proxy labflow-web:80
 }
 
+# ClinicHub: public demo (synthetic clinics, one-click sign-in, accounts and
+# clinics locked). Its OpenID Connect endpoints need the HTTPS Caddy gives.
+{$HUB_DOMAIN} {
+	import common
+	reverse_proxy clinichub:8080
+}
+
 # FinancePowerApp and PharmaFlow: demo data, but both still run on their
 # development sign-in (anyone who reaches them is the developer).
 {$FINANCE_DOMAIN} {

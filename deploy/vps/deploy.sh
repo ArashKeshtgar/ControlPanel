@@ -20,6 +20,7 @@ declare -A REPOS=(
   [LabFlow]=https://github.com/ArashKeshtgar/LabFlow.git
   [FinancePowerApp]=https://github.com/ArashKeshtgar/FinancePowerApp.git
   [Drugstore]=https://github.com/ArashKeshtgar/Drugstore.git
+  [ClinicHub]=https://github.com/ArashKeshtgar/ClinicHub.git
 )
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }

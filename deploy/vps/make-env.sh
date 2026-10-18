@@ -9,7 +9,7 @@
 #   ControlPanel/.env                 from deploy/vps/.env.vps.example
 #   LedgerDashboard/server/.env       LedgerDashboard's own settings
 #
-# Sites become panel.<domain>, rebiomed.<domain>, english.<domain>, report.<domain>,
+# Sites become panel.<domain>, rebiomed.<domain>, english.<domain>, report.<domain>, hub.<domain>,
 # labflow.<domain>, finance.<domain>, pharmacy.<domain> and ledger.<domain>. It asks once
 # for the basic-auth password (LabFlow, FinancePowerApp, PharmaFlow and LedgerDashboard)
 # and prints the logins you'll need; nothing else is shown.
@@ -63,6 +63,7 @@ declare -A V=(
   [CLINICREPORT_DOMAIN]="report.$DOMAIN"
   [FINANCE_DOMAIN]="finance.$DOMAIN"
   [PHARMACY_DOMAIN]="pharmacy.$DOMAIN"
+  [HUB_DOMAIN]="hub.$DOMAIN"
   [BASIC_AUTH_HASH]="'$BA_HASH'"
   [SA_PASSWORD]="$(sqlpw)"
   [DB_PASSWORD]="$(sqlpw)"
@@ -80,6 +81,7 @@ declare -A V=(
   [FINANCE_DB_PASSWORD]="$(sqlpw)"
   [FINANCE_READER_PASSWORD]="$(sqlpw)"
   [PHARMAFLOW_DB_PASSWORD]="$(sqlpw)"
+  [CLINICHUB_DB_PASSWORD]="$(sqlpw)"
 )
 
 umask 077
