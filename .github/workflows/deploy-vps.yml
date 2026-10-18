@@ -1,8 +1,9 @@
 name: Deploy to VPS
 
 # After CI passes on main, or by hand (Actions -> Deploy to VPS -> Run
-# workflow) after pushing LedgerDashboard, ReBiomed or LabFlow, whose pushes
-# don't trigger anything here. Off until the repository variable
+# workflow) after pushing one of the app repos (LedgerDashboard, ReBiomed,
+# LabFlow, ClinicReport, FinancePowerApp, Drugstore...), whose pushes don't
+# trigger anything here. Off until the repository variable
 # VPS_DEPLOY_ENABLED is "true". Setup: deploy/vps/README.md, step 7.
 on:
   workflow_run:

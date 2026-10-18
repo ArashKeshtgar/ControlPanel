@@ -12,6 +12,8 @@
 #     the internet whatever the firewall says. `!reset` needs Compose 2.24+.
 #   - LedgerDashboard's and LabFlow's databases live in the container SQL
 #     Server (restored from backups by restore-db.sh) instead of on the host.
+#     FinancePowerApp's and PharmaFlow's are created there from their repos'
+#     scripts, with demo data, by app-db-init.
 #   - SQL Server runs as Express: the Developer edition isn't licensed for
 #     anything the public can reach.
 #   - wutility-adapter reads the wUtility Web demo on Azure.
@@ -32,6 +34,8 @@ services:
       # Private Context reader; defaults so an older .env keeps deploying.
       CONTEXT_DOMAIN: ${CONTEXT_DOMAIN:-ctx.arashkeshtgar.ca}
       CLINICREPORT_DOMAIN: ${CLINICREPORT_DOMAIN:-report.arashkeshtgar.ca}
+      FINANCE_DOMAIN: ${FINANCE_DOMAIN:-finance.arashkeshtgar.ca}
+      PHARMACY_DOMAIN: ${PHARMACY_DOMAIN:-pharmacy.arashkeshtgar.ca}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
@@ -48,6 +52,8 @@ services:
       - lessons-web
       - lessons-sync
       - clinicreport
+      - finance-web
+      - pharmaflow-web
     restart: unless-stopped
 
   sqlserver:
@@ -134,6 +140,63 @@ services:
 
   clinicreport:
     ports: !reset []
+
+  # One-shot: FinancePowerApp and PharmaFlow databases (create, apply new
+  # scripts) and the app logins, on every `up`. See app-db-init.sh.
+  app-db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/deploy/vps/app-db-init.sh"]
+    environment:
+      SA_PASSWORD: ${SA_PASSWORD}
+      FINANCE_DB_PASSWORD: ${FINANCE_DB_PASSWORD:?set FINANCE_DB_PASSWORD in .env (deploy/vps/env-add-missing.sh)}
+      FINANCE_READER_PASSWORD: ${FINANCE_READER_PASSWORD:?set FINANCE_READER_PASSWORD in .env}
+      PHARMAFLOW_DB_PASSWORD: ${PHARMAFLOW_DB_PASSWORD:?set PHARMAFLOW_DB_PASSWORD in .env}
+      LABFLOW_READER_PASSWORD: ${LABFLOW_READER_PASSWORD:?set LABFLOW_READER_PASSWORD in .env}
+    volumes:
+      - ./deploy:/deploy:ro
+      - ${FINANCE_DIR}/database:/apps/finance:ro
+      - ${PHARMAFLOW_DIR}/database:/apps/pharmaflow:ro
+    restart: "no"
+
+  finance-api:
+    depends_on:
+      app-db-init:
+        condition: service_completed_successfully
+    environment:
+      # Still Development (its developer sign-in), hence basic auth in the
+      # Caddyfile. A demo copy with synthetic books, not the Power App's
+      # Azure database.
+      ConnectionStrings__Finance: "Server=sqlserver,1433;Database=FinancePowerApp;User Id=finance_svc;Password=${FINANCE_DB_PASSWORD};TrustServerCertificate=True"
+
+  finance-web:
+    ports: !reset []
+
+  pharmaflow-api:
+    depends_on:
+      app-db-init:
+        condition: service_completed_successfully
+    environment:
+      ConnectionStrings__PharmaFlow: "Server=sqlserver,1433;Database=PharmaFlow;User Id=pharmaflow_svc;Password=${PHARMAFLOW_DB_PASSWORD};TrustServerCertificate=True"
+
+  pharmaflow-web:
+    ports: !reset []
+
+  labflow-adapter:
+    depends_on:
+      app-db-init:
+        condition: service_completed_successfully
+    environment:
+      DB_SERVER: sqlserver
+
+  finance-adapter:
+    depends_on:
+      app-db-init:
+        condition: service_completed_successfully
+    environment:
+      DB_SERVER: sqlserver
 
 volumes:
   caddy-data:

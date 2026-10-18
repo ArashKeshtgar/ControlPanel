@@ -10,8 +10,9 @@
 #   LedgerDashboard/server/.env       LedgerDashboard's own settings
 #
 # Sites become panel.<domain>, rebiomed.<domain>, english.<domain>, report.<domain>,
-# labflow.<domain> and ledger.<domain>. It asks once for the basic-auth password (LabFlow and
-# LedgerDashboard) and prints the logins you'll need; nothing else is shown.
+# labflow.<domain>, finance.<domain>, pharmacy.<domain> and ledger.<domain>. It asks once
+# for the basic-auth password (LabFlow, FinancePowerApp, PharmaFlow and LedgerDashboard)
+# and prints the logins you'll need; nothing else is shown.
 # Refuses to overwrite an existing file.
 set -euo pipefail
 
@@ -35,7 +36,7 @@ done
 rand() { openssl rand -base64 96 | tr -dc 'A-Za-z0-9' | head -c "$1"; }
 sqlpw() { printf '%s-Aa1' "$(rand 28)"; }
 
-read -r -s -p "Basic-auth password for labflow/ledger (12+ chars): " BA1; echo
+read -r -s -p "Basic-auth password for the private sites (12+ chars): " BA1; echo
 read -r -s -p "Again: " BA2; echo
 [[ "$BA1" == "$BA2" ]] || { echo "They differ." >&2; exit 1; }
 [[ ${#BA1} -ge 12 ]] || { echo "Too short." >&2; exit 1; }
@@ -60,6 +61,8 @@ declare -A V=(
   [LESSONS_DOMAIN]="english.$DOMAIN"
   [CONTEXT_DOMAIN]="ctx.$DOMAIN"
   [CLINICREPORT_DOMAIN]="report.$DOMAIN"
+  [FINANCE_DOMAIN]="finance.$DOMAIN"
+  [PHARMACY_DOMAIN]="pharmacy.$DOMAIN"
   [BASIC_AUTH_HASH]="'$BA_HASH'"
   [SA_PASSWORD]="$(sqlpw)"
   [DB_PASSWORD]="$(sqlpw)"
@@ -73,6 +76,10 @@ declare -A V=(
   [LEDGERDASH_API_TOKEN]="$(rand 64)"
   [REBIOMED_JWT_SECRET]="$(rand 64)"
   [LABFLOW_DB_PASSWORD]="$(sqlpw)"
+  [LABFLOW_READER_PASSWORD]="$(sqlpw)"
+  [FINANCE_DB_PASSWORD]="$(sqlpw)"
+  [FINANCE_READER_PASSWORD]="$(sqlpw)"
+  [PHARMAFLOW_DB_PASSWORD]="$(sqlpw)"
 )
 
 umask 077
@@ -108,7 +115,7 @@ in the files above if you ever need them):
   Control Panel   https://panel.$DOMAIN      admin  / $ADMIN_PW
                                                   viewer / $VIEWER_PW
   LedgerDashboard https://ledger.$DOMAIN     password: $LEDGER_LOGIN_PW
-  LabFlow + Ledger + ctx basic auth               user: arash, the password you typed
+  labflow, finance, pharmacy, ledger, ctx basic auth  user: arash, the password you typed
 
 Optional, fill in by hand if you want them:
   ANTHROPIC_API_KEY (both files), REBIOMED_STRIPE_* (test keys)

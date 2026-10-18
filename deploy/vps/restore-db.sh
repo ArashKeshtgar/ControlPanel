@@ -14,6 +14,11 @@
 #   LedgerDashboard: ledger_svc (password = DB_PASSWORD in LedgerDashboard/server/.env)
 #                    ledger_reader (LEDGER_READER_PASSWORD in this repo's .env)
 #   LabFlow:         labflow_svc (LABFLOW_DB_PASSWORD in this repo's .env)
+#                    labflow_reader (LABFLOW_READER_PASSWORD in this repo's .env)
+#   FinancePowerApp: finance_svc, finance_reader (FINANCE_*_PASSWORD)
+#   PharmaFlow:      pharmaflow_svc (PHARMAFLOW_DB_PASSWORD)
+# (The last two are normally created from scripts by app-db-init, not
+# restored; this is for bringing back a nightly backup.)
 set -euo pipefail
 
 ROOT="${PORTFOLIO_ROOT:-/srv/portfolio}"
@@ -72,8 +77,18 @@ restore_one() {
       run_sql_file "$ld/db/05-reader-login.sql" -v "READER_PASSWORD=$(env_val LEDGER_READER_PASSWORD .env)"
       ;;
     LabFlow)
-      sql "USE [LabFlow]; DROP USER IF EXISTS labflow_svc;" >/dev/null
+      sql "USE [LabFlow]; DROP USER IF EXISTS labflow_svc; DROP USER IF EXISTS labflow_reader;" >/dev/null
       run_sql_file deploy/labflow/sql-login.sql -v "LABFLOW_DB_PASSWORD=$(env_val LABFLOW_DB_PASSWORD .env)"
+      run_sql_file deploy/labflow/reader-login.sql -v "LABFLOW_READER_PASSWORD=$(env_val LABFLOW_READER_PASSWORD .env)"
+      ;;
+    FinancePowerApp)
+      sql "USE [FinancePowerApp]; DROP USER IF EXISTS finance_svc; DROP USER IF EXISTS finance_reader;" >/dev/null
+      run_sql_file deploy/finance/sql-login.sql \
+        -v "FINANCE_DB_PASSWORD=$(env_val FINANCE_DB_PASSWORD .env)" "FINANCE_READER_PASSWORD=$(env_val FINANCE_READER_PASSWORD .env)"
+      ;;
+    PharmaFlow)
+      sql "USE [PharmaFlow]; DROP USER IF EXISTS pharmaflow_svc;" >/dev/null
+      run_sql_file deploy/pharmaflow/sql-login.sql -v "PHARMAFLOW_DB_PASSWORD=$(env_val PHARMAFLOW_DB_PASSWORD .env)"
       ;;
   esac
   echo "    restored"
@@ -89,7 +104,7 @@ for f in "${files[@]}"; do restore_one "$f"; done
 
 # Whatever was connected to the old copies reconnects to the new ones.
 running="$(docker compose ps --services --status running)"
-for svc in ledgerdashboard ledgerdash-adapter labflow-api; do
+for svc in ledgerdashboard ledgerdash-adapter labflow-api labflow-adapter finance-api finance-adapter pharmaflow-api; do
   if grep -qx "$svc" <<<"$running"; then docker compose restart "$svc"; fi
 done
 echo "Done."

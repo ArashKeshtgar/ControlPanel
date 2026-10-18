@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nightly backup of everything that isn't in git: the four SQL Server
+# Nightly backup of everything that isn't in git: the SQL Server
 # databases, ReBiomed's MongoDB and its uploaded files. Keeps KEEP_DAYS days
 # in /srv/backups/daily. Install for the deploy user with `crontab -e`:
 #
@@ -14,7 +14,7 @@ BACKUPS="${BACKUP_DIR:-/srv/backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 STAMP="$(date +%Y%m%d-%H%M)"
 OUT="$BACKUPS/daily/$STAMP"
-DATABASES=(ControlPanelDb HisPlusDemo LedgerDashboard LabFlow)
+DATABASES=(ControlPanelDb HisPlusDemo LedgerDashboard LabFlow FinancePowerApp PharmaFlow)
 
 cd "$CP"
 mkdir -p "$OUT"

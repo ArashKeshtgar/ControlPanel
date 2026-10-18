@@ -19,8 +19,9 @@
 	}
 }
 
-# Only the owner's eyes: LabFlow's demo sign-in has no password, and
-# LedgerDashboard holds the job search (companies, contacts).
+# Only the owner's eyes: LabFlow's, FinancePowerApp's and PharmaFlow's demo
+# sign-ins have no password, and LedgerDashboard holds the job search
+# (companies, contacts).
 (private) {
 	basic_auth {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
@@ -84,6 +85,20 @@
 	import common
 	import private
 	reverse_proxy labflow-web:80
+}
+
+# FinancePowerApp and PharmaFlow: demo data, but both still run on their
+# development sign-in (anyone who reaches them is the developer).
+{$FINANCE_DOMAIN} {
+	import common
+	import private
+	reverse_proxy finance-web:80
+}
+
+{$PHARMACY_DOMAIN} {
+	import common
+	import private
+	reverse_proxy pharmaflow-web:80
 }
 
 {$LEDGER_DOMAIN} {

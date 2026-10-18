@@ -28,16 +28,21 @@ Every adapter exposes exactly one contract — `GET /status` returning:
 
 `core-api` never talks to a project's database or API directly — only to its adapter's `/status` endpoint. That's the whole point of the pattern: `core-api` and the frontend don't need to know anything about how HIS+ or wUtility actually work internally.
 
-## Two adapter patterns (both built, both proven)
+## Adapter patterns
 
 1. **Proxy pattern** (`wutility-adapter`) — for a project that already has its own HTTP API (wUtility Web, DbaOpsConsole, LedgerDashboard, mern-animation-project all qualify). The adapter just calls that real API and normalizes the response.
 2. **Direct-DB-read pattern** (`hisplus-adapter`, `ledgerdash-adapter`) — for a project whose data lives in SQL Server. `hisplus-adapter` reads HIS+'s tables (a WinForms app with no API). `ledgerdash-adapter` reads LedgerDashboard's database only through its reporting views (`db/04-views.sql` in that repo) with a login that can't see the tables at all, so its numbers match the dashboard's own UI exactly. Besides `/status` it serves read-only `/insights/followups`, `/insights/funnel` and `/insights/gaps` for the assistant.
+
+Two more of each pattern:
+
+3. **Probe pattern** (`probe-adapter`) — the smallest proxy adapter, for an app whose only unauthenticated surface is a health endpoint or its front page. One image, configured per container with `APP_NAME`, `PROBES` (`name=url` pairs) and `PORT`: it reports healthy when every probe answers 2xx, with each answer time as a metric, and names only the failing probe and its HTTP status, never the URL. It runs five times: ReBiomed (web + API), the English lessons (web + sync), ClinicHub (on the host, `:5300`), ClinicReport and PharmaFlow (web + API).
+4. **`labflow-adapter`** and **`finance-adapter`** (DB-read) — counts from LabFlow (appointments today, open requisitions, results to verify, critical values not yet phoned, electronic orders waiting, failing result messages to ClinicHub) and FinancePowerApp (inbox documents waiting for a posting map or rejected, receivables and how much is over 90 days, payables, past months still open). Each has its own login granted `SELECT` on only the columns its queries read ([`deploy/labflow/reader-login.sql`](deploy/labflow/reader-login.sql), [`deploy/finance/sql-login.sql`](deploy/finance/sql-login.sql)): no patient, test or result value in LabFlow; no document payload, account or party name in FinancePowerApp. `finance-adapter` also serves `/insights/needs-mapping` and `/insights/aging` for the assistant. Both connect lazily, so a database that isn't there yet shows as "unreachable" instead of a crashing container.
 
 `JobSearch/engine` and `English Engine` don't have a SQL database either — their adapter would read the ledger CSV / lesson output folder directly, a third minor variant of pattern 2.
 
 ## Adding the next adapter
 
-1. Copy `services/adapters/hisplus-adapter` (DB-read) or `wutility-adapter` (proxy) as a starting point. Each adapter keeps its logic in `src/app.ts` (a `createApp(...)` factory with its dependencies injected) and its wiring in `src/main.ts`, so `/status` can be tested without a real database or upstream API.
+1. For an app with a health URL, no code at all: add a `probe-adapter` service with its `APP_NAME`, `PROBES` and `PORT` (see `compose.apps.yml`). Otherwise copy `services/adapters/finance-adapter` (DB-read) or `wutility-adapter` (proxy) as a starting point. Each adapter keeps its logic in `src/app.ts` (a `createApp(...)` factory with its dependencies injected) and its wiring in `src/main.ts`, so `/status` can be tested without a real database or upstream API.
 2. Implement `GET /status` for the new project and add an `app.spec.ts` next to it.
 3. `npm install`, run it on the next free port.
 4. Point the project's row at it from the **Manage ports** page. The registry is already seeded with all 17 projects, each with a reserved port (4001–4017); the ones without an adapter yet show "Offline". If the adapter runs on a new host name, add that host to `ADAPTER_ALLOWED_HOSTS` first (see Security).
@@ -46,13 +51,14 @@ No changes to `core-api` or the frontend are ever needed to add a project — th
 
 ## AI assistant
 
-The dashboard's **Ask the portfolio** box sends a question to `POST /assistant/ask` (any signed-in user). `core-api` runs a tool-use loop with Claude (`claude-opus-5`) over three read-only tools:
+The dashboard's **Ask the portfolio** box sends a question to `POST /assistant/ask` (any signed-in user). `core-api` runs a tool-use loop with Claude (`claude-opus-5`) over four read-only tools:
 
 | Tool | Reads |
 |---|---|
 | `list_projects` | every project's live `/status` (same data as the dashboard) |
 | `get_project_status` | one project's status and metrics |
 | `get_job_search_insight` | `followups`, `funnel` or `gaps` from `ledgerdash-adapter`'s `/insights/*` |
+| `get_finance_insight` | `needs-mapping` (inbox documents waiting for a person) or `aging` (receivables by payer type and age) from `finance-adapter` |
 
 Design choices:
 
@@ -114,8 +120,22 @@ The Docker-specific code is one class, `DockerOrchestrator`, behind an `Orchestr
 | `labflow-api`, `labflow-web` | LabFlow (Ontario lab system, ASP.NET Core + React) | The `LabFlow` database on the host SQL Server through its own `labflow_svc` login ([`deploy/labflow/sql-login.sql`](deploy/labflow/sql-login.sql): read/write, sequence use, the audit schema append-only). Runs as Development, the only mode with LabFlow's demo sign-in, which is why it must stay on 127.0.0.1 |
 | `lessons-web`, `lessons-sync` | English lessons (LanguageLessonDesigner, static Vue build) | nginx serves the build (`LESSONS_DIR`); `lessons-sync` keeps the review progress of the phone and the PC in one JSON file in a volume, checked with its own key |
 | `clinicreport` | ClinicReport (structured echo/ECG reports, .NET + React) | One image from its repo (`CLINICREPORT_DIR`, default `../ClinicReport`), SQLite in a volume, run as the public demo: synthetic patients, one-click demo users, reset every night |
+| `finance-api`, `finance-web` | FinancePowerApp (the clinic group's accounting, ASP.NET Core + React) | The `FinancePowerApp` database on the host SQL Server through `finance_svc` ([`deploy/finance/sql-login.sql`](deploy/finance/sql-login.sql): read/write, the journal-number sequence, the Power App's procedures, no DDL). Development, like LabFlow: its only sign-in until ClinicHub's exists |
+| `pharmaflow-api`, `pharmaflow-web` | PharmaFlow (community pharmacy, the [Drugstore](https://github.com/ArashKeshtgar/Drugstore) repo) | The `PharmaFlow` database through `pharmaflow_svc` ([`deploy/pharmaflow/sql-login.sql`](deploy/pharmaflow/sql-login.sql): the PHIPA access log append-only). Development only so far. Sends its supplier invoices and dispenses to `finance-api` with the development key both apps share |
+| `*-adapter` | One per app above | `probe-adapter` five times, `labflow-adapter`, `finance-adapter`; not published, reached by core-api on the compose network |
 
-ReBiomed, LabFlow and the English lessons are still being developed, so their Dockerfiles live here in [`deploy/`](deploy/) (with per-Dockerfile `.dockerignore` files) and build from each repo's working folder (`REBIOMED_DIR`, `LABFLOW_DIR`, `LESSONS_DIR`, `DEPLOY_DIR`); they can move into the app repos once those settle. After LabFlow's `database/deploy.ps1 -Recreate`, run `sql-login.sql` again: dropping the database drops its user.
+ReBiomed, LabFlow, the English lessons, FinancePowerApp and PharmaFlow are still being developed, so their Dockerfiles live here in [`deploy/`](deploy/) (with per-Dockerfile `.dockerignore` files) and build from each repo's working folder (`REBIOMED_DIR`, `LABFLOW_DIR`, `LESSONS_DIR`, `FINANCE_DIR`, `PHARMAFLOW_DIR`, `DEPLOY_DIR`); they can move into the app repos once those settle. On this machine their databases are made by each repo's own `database/deploy.ps1`; then run the login scripts once (and again after a `-Recreate`, which drops the users):
+
+```powershell
+sqlcmd -S . -E -b -i deploy/labflow/sql-login.sql    -v LABFLOW_DB_PASSWORD="..."
+sqlcmd -S . -E -b -i deploy/labflow/reader-login.sql -v LABFLOW_READER_PASSWORD="..."
+sqlcmd -S . -E -b -i deploy/finance/sql-login.sql    -v FINANCE_DB_PASSWORD="..." FINANCE_READER_PASSWORD="..."
+sqlcmd -S . -E -b -i deploy/pharmaflow/sql-login.sql -v PHARMAFLOW_DB_PASSWORD="..."
+```
+
+On the VPS, `app-db-init` creates FinancePowerApp's and PharmaFlow's databases from their scripts by itself (see [`deploy/vps/README.md`](deploy/vps/README.md)).
+
+ClinicHub isn't containerized yet (its own README lists the Docker image as to do): `clinichub-adapter` checks it on the host at `:5300`, where `dotnet run` serves it. TaxiReceipt is a Windows Service on the attendance machine with no HTTP surface, so its registry row has no adapter.
 
 wUtility Web's API is deliberately not containerized: it syncs SQL Server databases through connection strings that use Windows authentication, which a Linux container can't do.
 
@@ -153,7 +173,7 @@ cp .env.example .env   # fill in every value; the file shows how to generate sec
 docker compose up --build
 ```
 
-This starts SQL Server in its own container (published on `14333`, so it doesn't clash with a local instance), runs `db/*.sql` through the one-shot `db-init` service, creates the two users through `seed-users`, then starts `core-api`, the socket proxy, the three adapters and the frontend on http://localhost:4100 (set `FRONTEND_PORT` in `.env` if 4100 is taken; core-api allows that origin automatically). The registry is seeded with container host names, so there's no manual step. Compose stops with a clear message if any variable in `.env` is missing.
+This starts SQL Server in its own container (published on `14333`, so it doesn't clash with a local instance), runs `db/*.sql` through the one-shot `db-init` service, creates the two users through `seed-users`, then starts `core-api`, the socket proxy, the three adapters and the frontend (the apps' own adapters come with `compose.apps.yml`) on http://localhost:4100 (set `FRONTEND_PORT` in `.env` if 4100 is taken; core-api allows that origin automatically). The registry is seeded with container host names, so there's no manual step. Compose stops with a clear message if any variable in `.env` is missing.
 
 The only piece outside this file is wUtility Web's .NET API (a separate repo). Start it on the host with the same `WUTILITY_API_KEY`; until then the wUtility card shows "unreachable".
 
@@ -165,7 +185,7 @@ Against a local SQL Server, from the `db/` folder (Windows `sqlcmd`, integrated 
 sqlcmd -S . -E -b -i 01-databases.sql
 sqlcmd -S . -E -b -i 02-service-login.sql -v DB_PASSWORD="<password for controlpanel_svc>"
 sqlcmd -S . -E -b -i 03-controlpanel-schema.sql
-sqlcmd -S . -E -b -i 04-controlpanel-seed.sql -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002 LEDGERDASH_ADAPTER=localhost:4006
+sqlcmd -S . -E -b -i 04-controlpanel-seed.sql -v ADAPTER_HOST=localhost WUTILITY_ADAPTER=localhost:4001 HISPLUS_ADAPTER=localhost:4002 LEDGERDASH_ADAPTER=localhost:4006 REBIOMED_ADAPTER=localhost:4010 LESSONS_ADAPTER=localhost:4011 CLINICHUB_ADAPTER=localhost:4012 LABFLOW_ADAPTER=localhost:4013 CLINICREPORT_ADAPTER=localhost:4014 PHARMAFLOW_ADAPTER=localhost:4015 FINANCE_ADAPTER=localhost:4016
 sqlcmd -S . -E -b -i 05-hisplus-demo.sql
 ```
 
@@ -181,6 +201,10 @@ cd services/core-api && npm run start:dev                     # :4000
 cd services/adapters/wutility-adapter && npm run start:dev    # :4001
 cd services/adapters/hisplus-adapter && npm run start:dev     # :4002
 cd services/adapters/ledgerdash-adapter && npm run start:dev  # :4006
+cd services/adapters/labflow-adapter && npm run start:dev     # :4013 (DB_PASSWORD: labflow_reader)
+cd services/adapters/finance-adapter && npm run start:dev     # :4016 (DB_PASSWORD: finance_reader)
+# probe-adapter, once per app, e.g. ClinicReport:
+cd services/adapters/probe-adapter && APP_NAME=ClinicReport PROBES=http://localhost:8080/healthz PORT=4014 npm run start:dev
 cd frontend && npx ng serve --port 4100                     # :4100
 ```
 
@@ -189,13 +213,14 @@ cd frontend && npx ng serve --port 4100                     # :4100
 | Where | Run | Covers |
 |---|---|---|
 | `services/core-api` | `npm test` (Jest) | Login, token types and secrets, refresh, logout revocation, RBAC guard, secret validation, SSRF allowlist; service control (label allowlist, ids only from the listing, names that could change the URL, restart as stop + start, proxy refusals, log demux and masking, confirmation, one action at a time, audit on success and failure, Admin-only routes); the assistant's tool loop with a scripted fake Claude client (parallel tools, error results, refusal, turn cap, rate limit, not-configured 503) |
-| `services/adapters/*` | `npm test` (Jest) | Each adapter's `/status` over real HTTP with the upstream API or database faked: success, upstream errors, timeouts, empty tables |
+| `services/adapters/*` | `npm test` (Jest) | Each adapter's `/status` (and `/insights/*`) over real HTTP with the upstream API or database faked: success, upstream errors, timeouts, empty tables, no internal URL or database error in the answer; the DB-read adapters' queries checked to read no column their logins aren't granted |
 | `frontend` | `npm run test:ci` (Karma, headless Chrome) | Token storage, transparent refresh-and-retry, one shared refresh, session end on a rejected refresh, server-side logout, admin route guard, the assistant panel, service-control error messages |
 
-CI runs all of them, plus the production builds and all five Docker images, on every push.
+CI runs all of them, plus the production builds and all eight Docker images, on every push.
 
 ## What's deliberately not built (yet)
 
 - Message-queue-based async status push (RabbitMQ) — for a status dashboard, synchronous REST composition with a short per-adapter timeout is simpler and equally correct; there's no async workflow here that would benefit from a queue.
-- The remaining 14 adapters — same two patterns, not yet built for the other 14 projects. The next useful ones: ClinicReport, ClinicHub and PharmaFlow (proxy over their `/healthz`), FinancePowerApp and LabFlow (DB-read: inbox documents waiting for mapping, open receivables; today's requisitions, unreleased results).
+- The remaining 7 adapters (DrOffice, SmartLedgerAI, JobSearch/engine, English Engine, DbaOpsConsole, mern-animation-project, TaxiReceipt) — same patterns.
+- ClinicHub as a container: it needs its own Docker image first (one database per clinic, a catalog database), and then LabFlow, ClinicReport, PharmaFlow and FinancePowerApp can run connected to it instead of on their development sign-ins.
 - Status history and a daily AI digest — the assistant sees live status only; storing snapshots would let it answer "what changed since yesterday?".

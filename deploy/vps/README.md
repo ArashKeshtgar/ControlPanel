@@ -1,8 +1,8 @@
 # Running the portfolio on one VPS
 
 Everything that runs as containers on the dev machine (Control Panel, its
-adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons, ClinicReport) on a single
-Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
+adapters, LedgerDashboard, ReBiomed, LabFlow, the English lessons, ClinicReport,
+FinancePowerApp, PharmaFlow) on a single Linux server, behind Caddy with automatic HTTPS. wUtility Web stays on Azure;
 its adapter reads the Azure demo.
 
 ```
@@ -12,6 +12,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
                          ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
                          ├─ report.<domain>    -> clinicreport (.NET + React, SQLite)   public demo
                          ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
+                         ├─ finance.<domain>   -> finance-web -> finance-api            basic auth
+                         ├─ pharmacy.<domain>  -> pharmaflow-web -> pharmaflow-api      basic auth
                          └─ ledger.<domain>    -> ledgerdashboard                        basic auth
              SQL Server (Express), MongoDB, core-api, adapters: no published ports
 ```
@@ -25,6 +27,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 | `make-env.sh` | server, once | fills both `.env` files with generated secrets |
 | `export-dbs.ps1` | Windows PC | backs up LedgerDashboard and LabFlow for the move |
 | `restore-db.sh` | server | restores `.bak` files and recreates the app logins |
+| `app-db-init.sh` | server (one-shot `app-db-init` container, every `up`) | creates and upgrades the FinancePowerApp and PharmaFlow demo databases from their repos' scripts, and the app and adapter logins |
+| `env-add-missing.sh` | server (run by `deploy.sh`) | adds settings new in `.env.vps.example` to an existing `.env`, generating new passwords |
 | `deploy.sh` | server | pull all repos, rebuild, wait for health |
 | `push-context.ps1` | Windows PC | context engine export -> `/srv/portfolio/context` for ctx.<domain> |
 | `backup.sh` | server, nightly | SQL + Mongo + uploads, 14 days kept |
@@ -40,8 +44,8 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 
 ## 2. Domain and DNS
 
-Seven A records, all to the server's IPv4 (and AAAA if it has IPv6):
-`panel`, `rebiomed`, `english`, `ctx`, `report`, `labflow`, `ledger`. Caddy can only get certificates once
+Nine A records, all to the server's IPv4 (and AAAA if it has IPv6):
+`panel`, `rebiomed`, `english`, `ctx`, `report`, `labflow`, `finance`, `pharmacy`, `ledger`. Caddy can only get certificates once
 these resolve, so do this early.
 
 ## 3. Bootstrap
@@ -72,6 +76,8 @@ git clone https://github.com/ArashKeshtgar/Rebiomed.git
 git clone https://github.com/ArashKeshtgar/LabFlow.git
 git clone https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
 git clone https://github.com/ArashKeshtgar/ClinicReport.git
+git clone https://github.com/ArashKeshtgar/FinancePowerApp.git
+git clone https://github.com/ArashKeshtgar/Drugstore.git
 
 cd ControlPanel
 deploy/vps/make-env.sh <your-domain> <your-email>
@@ -110,7 +116,11 @@ rm /srv/backups/import/*.bak
 `restore-db.sh` recreates `ledger_svc`, `ledger_reader` and `labflow_svc` with
 the passwords from the two `.env` files, so they must be filled in first.
 Control Panel's own databases (ControlPanelDb, HisPlusDemo) are created by
-`db-init` on the first deploy.
+`db-init` on the first deploy, and FinancePowerApp's and PharmaFlow's by
+`app-db-init`, from each repo's numbered `database/*.sql` scripts with their
+synthetic demo data (the same scripts and the same migrations table as the
+repo's `deploy.ps1`, so a pulled new script is applied on the next deploy).
+This FinancePowerApp is a demo copy, not the Power App's Azure database.
 
 ## 6. First deploy
 
@@ -173,6 +183,14 @@ to the PC now and then:
 The provider's own snapshot/backup option (usually ~20% of the server price)
 is the easy upgrade.
 
+## Updating a server set up before a release
+
+`deploy.sh` runs `env-add-missing.sh` first: settings that are new in
+`.env.vps.example` are appended to `.env` (new database passwords generated
+on the server, new site names on your domain), and nothing already there is
+changed. Add DNS records for any new site names; until they resolve, Caddy
+logs certificate errors for those names only.
+
 ## Day to day
 
 | | |
@@ -190,8 +208,9 @@ is the easy upgrade.
   `compose.vps.yml` removes them with `!reset` (Compose 2.24+).
 - **SQL Server Express.** Developer edition isn't licensed for anything the
   public can reach. Express caps a database at 10 GB, far above what's here.
-- **Basic auth on LabFlow and LedgerDashboard.** LabFlow runs as Development,
-  where its demo sign-in is a role switcher with no password; LedgerDashboard
-  holds the job search. Both are for the owner, and whoever gets the password.
+- **Basic auth on LabFlow, FinancePowerApp, PharmaFlow and LedgerDashboard.**
+  The first three run as Development, where their sign-in is a role switcher
+  or a single developer user with no password; LedgerDashboard holds the job
+  search. Both are for the owner, and whoever gets the password.
 - **Control Panel is public** with its own login. Give people the viewer
   account; only Admin can start and stop services.

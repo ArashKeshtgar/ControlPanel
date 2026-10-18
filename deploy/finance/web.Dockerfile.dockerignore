@@ -1,0 +1,9 @@
+**/node_modules
+**/bin
+**/obj
+web/dist
+web/*.tsbuildinfo
+src
+tests
+database
+.git

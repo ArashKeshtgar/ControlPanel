@@ -18,6 +18,8 @@ declare -A REPOS=(
   [LanguageLessonDesigner]=https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
   [ClinicReport]=https://github.com/ArashKeshtgar/ClinicReport.git
   [LabFlow]=https://github.com/ArashKeshtgar/LabFlow.git
+  [FinancePowerApp]=https://github.com/ArashKeshtgar/FinancePowerApp.git
+  [Drugstore]=https://github.com/ArashKeshtgar/Drugstore.git
 )
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
@@ -48,6 +50,10 @@ done
 mkdir -p "$ROOT/context"
 
 [[ -f "$CP/.env" ]] || { echo "Missing $CP/.env (copy deploy/vps/.env.vps.example)."; exit 1; }
+# Settings added to the template since this server's .env was written:
+# generated passwords for new database logins, the template's defaults for
+# the rest. Never changes a value that's already there.
+"$CP/deploy/vps/env-add-missing.sh"
 
 cd "$CP"
 log "Build and start"
