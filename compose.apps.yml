@@ -349,6 +349,116 @@ services:
       controlpanel.service: analytics-web
       controlpanel.display: "Analytics web"
 
+  # ------------------------------------------------------- IntegrationHub --
+  # The message hub between the clinic applications (github.com/ArashKeshtgar/IntegrationHub): relays
+  # results, orders, prescriptions and financial documents between them, logs metadata only (never a
+  # body), and sends de-identified events to RabbitMQ for Analytics. Its own PostgreSQL and RabbitMQ
+  # run here (RabbitMQ is published on 127.0.0.1:5672, where Analytics' consumer looks for it, so do
+  # not run the hub repository's own compose.yml at the same time). The applications it relays to
+  # are reached on the host. Sign-in is ClinicHub (client `integrationhub-admin`, redirect
+  # http://localhost:5701/...), so the web port stays 5701. HL7 and the event feed are off until
+  # their secrets are set in .env (see the hub's README).
+  integrationhub-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: integrationhub
+      POSTGRES_USER: integrationhub
+      POSTGRES_PASSWORD: ${INTEGRATIONHUB_DB_PASSWORD:-integrationhub}
+    volumes:
+      - integrationhub-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      test: ["CMD-SHELL", "pg_isready -U integrationhub"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: integrationhub-db
+      controlpanel.display: "IntegrationHub database"
+
+  integrationhub-mq:
+    image: rabbitmq:3.13-alpine
+    ports:
+      - "127.0.0.1:5672:5672"
+    volumes:
+      - integrationhub-mq:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 10s
+      retries: 6
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: integrationhub-mq
+      controlpanel.display: "IntegrationHub RabbitMQ"
+
+  integrationhub:
+    build: ${INTEGRATIONHUB_DIR:-../IntegrationHub}
+    image: controlpanel-integrationhub
+    depends_on:
+      integrationhub-db:
+        condition: service_healthy
+      integrationhub-mq:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${INTEGRATIONHUB_API_PORT:-5700}:5700"
+    environment:
+      HUB_DB_URL: jdbc:postgresql://integrationhub-db:5432/integrationhub
+      HUB_DB_PASSWORD: ${INTEGRATIONHUB_DB_PASSWORD:-integrationhub}
+      HUB_RABBITMQ_HOST: integrationhub-mq
+      # The issuer as the browser sees it; the keys fetched over the host.
+      HUB_AUTH_ISSUER: ${INTEGRATIONHUB_AUTH_ISSUER:-http://localhost:5301/}
+      HUB_AUTH_JWKS_URI: ${INTEGRATIONHUB_AUTH_JWKS_URI:-http://host.docker.internal:5300/.well-known/jwks}
+      HUB_ROUTE_CLINICHUB_UPSTREAM: ${INTEGRATIONHUB_CLINICHUB_URL:-http://host.docker.internal:5300}
+      HUB_ROUTE_LABFLOW_UPSTREAM: ${INTEGRATIONHUB_LABFLOW_URL:-http://host.docker.internal:5180}
+      HUB_ROUTE_CLINICREPORT_UPSTREAM: ${INTEGRATIONHUB_CLINICREPORT_URL:-http://host.docker.internal:5290}
+      HUB_ROUTE_PHARMAFLOW_UPSTREAM: ${INTEGRATIONHUB_PHARMAFLOW_URL:-http://host.docker.internal:5500}
+      HUB_ROUTE_FINANCE_UPSTREAM: ${INTEGRATIONHUB_FINANCE_URL:-http://host.docker.internal:5400}
+      # The admin web calls through its own nginx; CORS only matters for `npm run dev` on another port.
+      HUB_ADMIN_CORS_ORIGINS: http://localhost:${INTEGRATIONHUB_PORT:-5701}
+      # Empty = off. Events need 32+ characters; HL7 needs the queue key and ClinicHub's secret for `integrationhub`.
+      HUB_EVENTS_ENABLED: ${INTEGRATIONHUB_EVENTS_ENABLED:-false}
+      HUB_EVENTS_PSEUDONYM_SECRET: ${INTEGRATIONHUB_EVENTS_PSEUDONYM_SECRET:-}
+      HUB_HL7_ENABLED: ${INTEGRATIONHUB_HL7_ENABLED:-false}
+      HUB_HL7_QUEUE_KEY: ${INTEGRATIONHUB_HL7_QUEUE_KEY:-}
+      HUB_CLINICHUB_CLIENT_SECRET: ${INTEGRATIONHUB_CLINICHUB_CLIENT_SECRET:-}
+      HUB_ALERTS_WEBHOOK_URL: ${INTEGRATIONHUB_ALERTS_WEBHOOK_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:5700/actuator/health/liveness"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: integrationhub
+      controlpanel.display: "IntegrationHub"
+
+  integrationhub-web:
+    build:
+      context: ${INTEGRATIONHUB_DIR:-../IntegrationHub}/web
+      args:
+        VITE_OIDC_AUTHORITY: ${INTEGRATIONHUB_AUTH_ISSUER:-http://localhost:5301/}
+    depends_on:
+      - integrationhub
+    ports:
+      - "127.0.0.1:${INTEGRATIONHUB_PORT:-5701}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: integrationhub-web
+      controlpanel.display: "IntegrationHub web"
+
 networks:
   # internal: MongoDB has no route out and only the ReBiomed API can reach it.
   rebiomed:
@@ -361,3 +471,5 @@ volumes:
   clinicreport-data:
   lessons-sync-data:
   analytics-data:
+  integrationhub-db:
+  integrationhub-mq:
