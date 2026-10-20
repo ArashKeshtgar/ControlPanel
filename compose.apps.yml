@@ -278,6 +278,10 @@ services:
       ANALYTICS_FINANCE_CONNECTION_STRING: ${ANALYTICS_FINANCE_CONNECTION_STRING:-}
       ANALYTICS_RABBITMQ_URL: ${ANALYTICS_RABBITMQ_URL:-amqp://guest:guest@host.docker.internal:5672/}
       ANALYTICS_RUN_EVERY: ${ANALYTICS_RUN_EVERY:-6h}
+      # Told (JSON POST) when a run fails and when it works again; empty = nobody.
+      ANALYTICS_ALERT_WEBHOOK_URL: ${ANALYTICS_ALERT_WEBHOOK_URL:-}
+      ANALYTICS_KEEP_EXTRACT_DAYS: ${ANALYTICS_KEEP_EXTRACT_DAYS:-14}
+      ANALYTICS_KEEP_REPORTS: ${ANALYTICS_KEEP_REPORTS:-200}
     volumes:
       - analytics-data:/app/data
     extra_hosts:
