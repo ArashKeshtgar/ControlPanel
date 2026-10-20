@@ -6,6 +6,9 @@ WORKDIR /src
 COPY src/LabFlow.Api/LabFlow.Api.csproj src/LabFlow.Api/
 RUN dotnet restore src/LabFlow.Api/LabFlow.Api.csproj
 COPY src ./src
+# The .csproj copies database/*.sql into the output: the API runs the upgrade
+# scripts (050 on) at start-up and builds a clinic's database from them.
+COPY database ./database
 RUN dotnet publish src/LabFlow.Api/LabFlow.Api.csproj -c Release -o /out --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

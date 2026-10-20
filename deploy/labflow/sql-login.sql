@@ -15,6 +15,9 @@ GO
 IF USER_ID(N'labflow_svc') IS NULL CREATE USER labflow_svc FOR LOGIN labflow_svc;
 ALTER ROLE db_datareader ADD MEMBER labflow_svc;
 ALTER ROLE db_datawriter ADD MEMBER labflow_svc;
+-- LabFlow runs its upgrade scripts (database/050 on) at start-up, and they
+-- create tables; without this the API crashes on start.
+ALTER ROLE db_ddladmin ADD MEMBER labflow_svc;
 -- NEXT VALUE FOR on the accession and MRN sequences needs UPDATE on them.
 GRANT UPDATE ON OBJECT::lab.AccessionSeq TO labflow_svc;
 GRANT UPDATE ON OBJECT::core.MrnSeq TO labflow_svc;
