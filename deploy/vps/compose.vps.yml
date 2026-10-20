@@ -135,6 +135,26 @@ services:
   clinicreport:
     ports: !reset []
 
+  # Analytics and IntegrationHub are local-only for now: their repos aren't
+  # cloned here (deploy.sh) and they sign in through ClinicHub on the PC. A
+  # profile nobody turns on keeps them out of `docker compose up` on the VPS.
+  analytics-api:
+    profiles: ["local-only"]
+  analytics-scheduler:
+    profiles: ["local-only"]
+  analytics-consumer:
+    profiles: !override ["local-only"]
+  analytics-web:
+    profiles: ["local-only"]
+  integrationhub-db:
+    profiles: ["local-only"]
+  integrationhub-mq:
+    profiles: ["local-only"]
+  integrationhub:
+    profiles: ["local-only"]
+  integrationhub-web:
+    profiles: ["local-only"]
+
 volumes:
   caddy-data:
   caddy-config:
