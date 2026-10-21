@@ -412,6 +412,11 @@ services:
       HUB_DB_URL: jdbc:postgresql://integrationhub-db:5432/integrationhub
       HUB_DB_PASSWORD: ${INTEGRATIONHUB_DB_PASSWORD:-integrationhub}
       HUB_RABBITMQ_HOST: integrationhub-mq
+      # RabbitMQ refuses `guest` from another container: the hub's own account (see the hub's README).
+      HUB_RABBITMQ_USER: ${INTEGRATIONHUB_RABBITMQ_USER:-guest}
+      HUB_RABBITMQ_PASSWORD: ${INTEGRATIONHUB_RABBITMQ_PASSWORD:-guest}
+      # Development: FinancePowerApp takes PharmaFlow's X-Finance-Key instead of a token; empty = tokens only.
+      HUB_ROUTE_FINANCE_API_KEY_HEADER: ${INTEGRATIONHUB_FINANCE_API_KEY_HEADER:-X-Finance-Key}
       # The issuer as the browser sees it; the keys fetched over the host.
       HUB_AUTH_ISSUER: ${INTEGRATIONHUB_AUTH_ISSUER:-http://localhost:5301/}
       HUB_AUTH_JWKS_URI: ${INTEGRATIONHUB_AUTH_JWKS_URI:-http://host.docker.internal:5300/.well-known/jwks}
