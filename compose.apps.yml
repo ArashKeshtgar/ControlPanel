@@ -276,6 +276,8 @@ services:
       ANALYTICS_WEB_ORIGIN: http://localhost:${ANALYTICS_PORT:-5601}
       # Read-only login on FinancePowerApp (analytics_reader); empty = no extract, runs fail and say so.
       ANALYTICS_FINANCE_CONNECTION_STRING: ${ANALYTICS_FINANCE_CONNECTION_STRING:-}
+      # Optional: LabFlow's warehouse (analytics_dw_reader, monthly lab volumes); empty = not read.
+      ANALYTICS_LABFLOW_DW_CONNECTION_STRING: ${ANALYTICS_LABFLOW_DW_CONNECTION_STRING:-}
       ANALYTICS_RABBITMQ_URL: ${ANALYTICS_RABBITMQ_URL:-amqp://guest:guest@host.docker.internal:5672/}
       ANALYTICS_RUN_EVERY: ${ANALYTICS_RUN_EVERY:-6h}
       # Told (JSON POST) when a run fails and when it works again; empty = nobody.
