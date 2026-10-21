@@ -421,6 +421,8 @@ services:
       HUB_ROUTE_FINANCE_API_KEY_HEADER: ${INTEGRATIONHUB_FINANCE_API_KEY_HEADER:-X-Finance-Key}
       # The issuer as the browser sees it; the keys fetched over the host.
       HUB_AUTH_ISSUER: ${INTEGRATIONHUB_AUTH_ISSUER:-http://localhost:5301/}
+      # The sign-in cookies of every app on localhost travel together; the default 8 KB is too small for a browser that has used them all.
+      SERVER_MAX_HTTP_REQUEST_HEADER_SIZE: 64KB
       HUB_AUTH_JWKS_URI: ${INTEGRATIONHUB_AUTH_JWKS_URI:-http://host.docker.internal:5300/.well-known/jwks}
       HUB_ROUTE_CLINICHUB_UPSTREAM: ${INTEGRATIONHUB_CLINICHUB_URL:-http://host.docker.internal:5300}
       HUB_ROUTE_LABFLOW_UPSTREAM: ${INTEGRATIONHUB_LABFLOW_URL:-http://host.docker.internal:5180}
