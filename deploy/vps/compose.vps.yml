@@ -77,6 +77,7 @@ services:
         condition: service_healthy
     environment:
       DB_SERVER: sqlserver
+      TZ: America/Toronto
 
   hisplus-adapter:
     ports: !reset []
@@ -105,6 +106,9 @@ services:
       COOKIE_SECURE: "true"
       # For scripts (Authorization: Bearer ...); empty turns it off.
       API_TOKEN: ${LEDGERDASH_API_TOKEN:-}
+      # Containers run in UTC, so rows saved after 8 PM Toronto time got
+      # tomorrow's date and folder name. Dates are Arash's local days.
+      TZ: America/Toronto
 
   rebiomed-api:
     environment:
