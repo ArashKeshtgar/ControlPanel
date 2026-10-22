@@ -209,6 +209,25 @@ services:
       controlpanel.service: lessons-web
       controlpanel.display: "English lessons"
 
+  # Programming lessons (C#, TypeScript, Python, Java side by side): static, like lessons-web.
+  programming-web:
+    build:
+      # The ProgrammingLessonDesigner repo next to this one (same folder on the PC and the VPS).
+      context: ${PROGRAMMING_DIR:-../ProgrammingLessonDesigner}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env (absolute path of this repo's deploy folder)}/programming/web.Dockerfile
+    ports:
+      - "127.0.0.1:${PROGRAMMING_PORT:-5178}:80"
+    restart: unless-stopped
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: programming-web
+      controlpanel.display: "Programming lessons"
+
   # Review-progress sync between the owner's phone and PC (english.<domain>/api/sync
   # and ctx.<domain>/api/sync via Caddy). One JSON file and its key in the volume.
   lessons-sync:

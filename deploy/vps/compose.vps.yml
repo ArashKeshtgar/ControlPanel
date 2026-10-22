@@ -32,6 +32,7 @@ services:
       # Private Context reader; defaults so an older .env keeps deploying.
       CONTEXT_DOMAIN: ${CONTEXT_DOMAIN:-ctx.arashkeshtgar.ca}
       CLINICREPORT_DOMAIN: ${CLINICREPORT_DOMAIN:-report.arashkeshtgar.ca}
+      PROGRAMMING_DOMAIN: ${PROGRAMMING_DOMAIN:-code.arashkeshtgar.ca}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in .env}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
@@ -48,6 +49,7 @@ services:
       - lessons-web
       - lessons-sync
       - clinicreport
+      - programming-web
     restart: unless-stopped
 
   sqlserver:
@@ -131,6 +133,9 @@ services:
     ports: !reset []
 
   lessons-web:
+    ports: !reset []
+
+  programming-web:
     ports: !reset []
 
   lessons-sync:

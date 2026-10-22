@@ -16,6 +16,7 @@ declare -A REPOS=(
   [LedgerDashboard]=https://github.com/ArashKeshtgar/LedgerDashboard.git
   [Rebiomed]=https://github.com/ArashKeshtgar/Rebiomed.git
   [LanguageLessonDesigner]=https://github.com/ArashKeshtgar/LanguageLessonDesigner.git
+  [ProgrammingLessonDesigner]=https://github.com/ArashKeshtgar/ProgrammingLessonDesigner.git
   [ClinicReport]=https://github.com/ArashKeshtgar/ClinicReport.git
 )
 LABFLOW_REPO="$(grep -E '^LABFLOW_REPO=' "$CP/.env" 2>/dev/null | cut -d= -f2- || true)"
