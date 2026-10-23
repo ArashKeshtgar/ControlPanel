@@ -7,12 +7,16 @@
 
 (common) {
 	encode zstd gzip
+	# Two blocks on purpose: a deletion (-Server) defers its whole block until the
+	# final response, and deferred headers are lost on an error response such as
+	# basic_auth's 401. Set right away, these reach the 401 too.
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
-		-Server
 	}
+	# Deferred: also removes the apps' own Server header.
+	header -Server
 	log {
 		output stdout
 		format console

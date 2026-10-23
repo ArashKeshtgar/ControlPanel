@@ -73,7 +73,10 @@ X11Forwarding no
 EOF
 sshd -t
 systemctl reload ssh
-sshd -T | grep -qx 'passwordauthentication no' || die "sshd still accepts passwords; check /etc/ssh/sshd_config.d/."
+# Into a variable first: in `sshd -T | grep -q`, grep quits at the first match,
+# sshd dies of SIGPIPE writing the rest, and pipefail fails the whole check.
+sshd_effective="$(sshd -T)"
+grep -qx 'passwordauthentication no' <<<"$sshd_effective" || die "sshd still accepts passwords; check /etc/ssh/sshd_config.d/."
 
 log "Firewall"
 ufw default deny incoming
