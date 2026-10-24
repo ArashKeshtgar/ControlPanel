@@ -268,6 +268,29 @@ then `migrate.sh` (database passwords) and `docker compose up -d`.
    two-factor, then create the people you want under Users (each gets a temporary password too). Run `admin` again
    whenever the password is lost: it resets it.
 
+### Giving someone a demo account (an interviewer, a reviewer)
+
+The platform stays private, so each viewer gets their own account with one role. About two minutes, no server access:
+
+1. Sign in at `https://hub.clinic.<domain>`, pick the clinic in the top bar (Harbourview or Lakeshore), open **People** -> **Add person**.
+2. User name `firstname.lastname`, a **temporary password** (16+ characters from the password manager), their name, and **one role**:
+
+   | Viewer wants to see | Role |
+   |---|---|
+   | Charts, orders, prescriptions (clinician's view) | Physician |
+   | Booking, check-in | Front desk |
+   | Lab results and specimens (LabFlow) | Lab technologist |
+   | The pharmacy (PharmaFlow) | Pharmacist |
+   | Claims, invoices, the books (FinancePowerApp) | Billing clerk |
+   | Everything, including People and Logs | Administrator (only for someone you trust) |
+
+3. Send the user name and the link `https://hub.clinic.<domain>` in one message and the temporary password in another,
+   by a different channel. They change it at first sign-in and set up two-factor.
+4. Afterwards: under **People**, take their role away (or disable the person, whichever the row offers) so the account can't be used again, and look
+   under **Logs** -> *Sign-ins and accounts* to see what they did.
+
+Everything they can reach is fictional data (`seed-demo`); nothing they do needs cleaning up except that account.
+
 LabFlow becomes the clinic's lab: `labflow.<domain>` redirects to `lab.clinic.<domain>`, its basic auth goes, and
 people sign in through ClinicHub (Lab technologist, Front desk, Nurse roles). The public ClinicReport demo at
 `report.<domain>` stays as it is.
