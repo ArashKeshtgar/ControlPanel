@@ -21,6 +21,16 @@ declare -A REPOS=(
 )
 LABFLOW_REPO="$(grep -E '^LABFLOW_REPO=' "$CP/.env" 2>/dev/null | cut -d= -f2- || true)"
 [[ -n "$LABFLOW_REPO" ]] && REPOS[LabFlow]="$LABFLOW_REPO"
+# The clinic platform (deploy/vps/compose.clinic.yml in COMPOSE_FILE) builds from five more repos.
+CLINIC=false
+grep -qE '^COMPOSE_FILE=.*compose\.clinic\.yml' "$CP/.env" 2>/dev/null && CLINIC=true
+if $CLINIC; then
+  REPOS[ClinicHub]=https://github.com/ArashKeshtgar/ClinicHub.git
+  REPOS[PharmaFlow]=https://github.com/ArashKeshtgar/Drugstore.git
+  REPOS[FinancePowerApp]=https://github.com/ArashKeshtgar/FinancePowerApp.git
+  REPOS[Analytics]=https://github.com/ArashKeshtgar/Analytics.git
+  REPOS[IntegrationHub]=https://github.com/ArashKeshtgar/IntegrationHub.git
+fi
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 
@@ -30,7 +40,8 @@ flock 9
 
 # Caddy bind-mounts the Caddyfile as a single file: a pull replaces the file,
 # and the running container keeps the old one until it restarts.
-caddy_before="$(sha1sum "$CP/deploy/vps/Caddyfile" 2>/dev/null || true)"
+caddy_sum() { cat "$CP/deploy/vps/Caddyfile" "$CP/deploy/vps/labflow.caddy" "$CP"/deploy/clinic/*.caddy 2>/dev/null | sha1sum; }
+caddy_before="$(caddy_sum)"
 
 for name in "${!REPOS[@]}"; do
   dir="$ROOT/$name"
@@ -52,9 +63,15 @@ mkdir -p "$ROOT/context"
 [[ -f "$CP/.env" ]] || { echo "Missing $CP/.env (copy deploy/vps/.env.vps.example)."; exit 1; }
 
 cd "$CP"
+if $CLINIC; then
+  # PharmaFlow's and FinancePowerApp's schemas and every clinic login exist before their APIs start.
+  log "Clinic databases"
+  docker compose up -d --wait sqlserver integrationhub-mq
+  "$CP/deploy/vps/migrate.sh"
+fi
 log "Build and start"
 docker compose up -d --build --remove-orphans
-if [[ "$(sha1sum "$CP/deploy/vps/Caddyfile")" != "$caddy_before" ]]; then
+if [[ "$(caddy_sum)" != "$caddy_before" ]]; then
   log "Caddyfile changed: restart caddy"
   docker compose restart caddy
 fi

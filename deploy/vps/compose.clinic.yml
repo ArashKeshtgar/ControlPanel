@@ -1,0 +1,386 @@
+# The clinic platform on the VPS, layered over the VPS layer. The server's .env adds it to COMPOSE_FILE:
+#
+#   COMPOSE_FILE=docker-compose.yml:compose.apps.yml:deploy/vps/compose.vps.yml:deploy/vps/compose.clinic.yml
+#
+# ClinicHub signs everyone in (real accounts, two-factor; no demo users), every application is in Production, and
+# they talk through IntegrationHub as on the PC's `via-hub` profiles. Synthetic data only: no real patient may be
+# entered before the privacy impact assessment and the agreements (see deploy/vps/README.md, "The clinic platform").
+#
+# Secrets are files, never environment variables: deploy/vps/make-clinic-secrets.sh writes them to
+# CLINIC_SECRETS_DIR and each service gets only its own, mounted where its framework reads them (/run/secrets/<the
+# setting's name> for .NET, Python and Spring; a file path for PostgreSQL, RabbitMQ and the signing certificate).
+# The same file can reach two services under two names: an application's ClinicHub secret is
+# Sso__Clients__<n>__ClientSecret in ClinicHub and ClinicHub__ClientSecret in the application.
+#
+# Every address is <name>.${CLINIC_DOMAIN}; Caddy answers for them (deploy/clinic/clinic.caddy), and the containers
+# reach Caddy under the same names (network aliases), so tokens' issuer is one address inside and out.
+
+x-dotnet: &dotnet
+  ASPNETCORE_ENVIRONMENT: Production
+  # Caddy terminates TLS: the scheme and client address come from its X-Forwarded-* headers (sign-in redirects, Secure cookies).
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+  TZ: America/Toronto
+
+# The aspnet image has no curl or wget; bash can speak HTTP/1.0.
+x-healthz: &healthz
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+  test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+
+x-web-healthz: &web-healthz
+  interval: 15s
+  timeout: 5s
+  retries: 3
+  test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+
+x-analytics-env: &analytics-env
+  ANALYTICS_HOST: 0.0.0.0
+  ANALYTICS_DATA_DIR: /app/data
+  ANALYTICS_WAREHOUSE_PATH: /app/data/warehouse.duckdb
+  ANALYTICS_OIDC_ISSUER: https://hub.${CLINIC_DOMAIN}/
+  # Keys from {issuer}.well-known/jwks: over HTTPS through Caddy (OpenIddict refuses plain HTTP outside development).
+  ANALYTICS_OIDC_JWKS_URI: ""
+  ANALYTICS_WEB_ORIGIN: https://analytics.${CLINIC_DOMAIN}
+  ANALYTICS_RUN_EVERY: ${ANALYTICS_RUN_EVERY:-6h}
+  ANALYTICS_ALERT_WEBHOOK_URL: ${ANALYTICS_ALERT_WEBHOOK_URL:-}
+  ANALYTICS_KEEP_EXTRACT_DAYS: ${ANALYTICS_KEEP_EXTRACT_DAYS:-14}
+  ANALYTICS_KEEP_REPORTS: ${ANALYTICS_KEEP_REPORTS:-200}
+  TZ: America/Toronto
+  # ANALYTICS_FINANCE_CONNECTION_STRING and ANALYTICS_RABBITMQ_URL are secrets (below): set here, even empty, they
+  # would win over the files.
+
+x-analytics-secrets: &analytics-secrets
+  - source: analytics-finance-connection
+    target: ANALYTICS_FINANCE_CONNECTION_STRING
+  - source: analytics-rabbitmq-url
+    target: ANALYTICS_RABBITMQ_URL
+
+services:
+  caddy:
+    environment:
+      CLINIC_DOMAIN: ${CLINIC_DOMAIN:?set CLINIC_DOMAIN in .env (e.g. clinic.arashkeshtgar.ca)}
+    volumes:
+      - ./deploy/clinic/clinic.caddy:/etc/caddy/sites/clinic.caddy:ro
+      # Same path as compose.vps.yml's LabFlow site, so this one replaces it.
+      - ./deploy/clinic/labflow.caddy:/etc/caddy/sites/labflow.caddy:ro
+    depends_on:
+      - clinichub
+      - clinicreport-clinic
+      - pharmaflow-web
+      - finance-web
+      - analytics-web
+      - integrationhub-web
+    networks:
+      default:
+        aliases:
+          - hub.${CLINIC_DOMAIN}
+          - report.${CLINIC_DOMAIN}
+          - lab.${CLINIC_DOMAIN}
+          - pharmacy.${CLINIC_DOMAIN}
+          - finance.${CLINIC_DOMAIN}
+          - analytics.${CLINIC_DOMAIN}
+          - integration.${CLINIC_DOMAIN}
+
+  # --------------------------------------------------------------- ClinicHub --
+  clinichub:
+    build:
+      context: ${CLINICHUB_DIR:-/srv/portfolio/ClinicHub}
+      dockerfile: ${DEPLOY_DIR:?set DEPLOY_DIR in .env}/clinic/clinichub.Dockerfile
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      <<: *dotnet
+      Clinics__DatabasePrefix: ClinicHub_
+      Demo__Enabled: "false"
+      Sso__Issuer: https://hub.${CLINIC_DOMAIN}/
+      Sso__SigningCertificatePath: /certs/signing.pfx
+      # The applications that sign in here. Secrets of the confidential ones are files (below), same index.
+      Sso__Clients__0__ClientId: clinicreport
+      Sso__Clients__0__DisplayName: ClinicReport
+      Sso__Clients__0__RedirectUris__0: https://report.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__0__PostLogoutRedirectUris__0: https://report.${CLINIC_DOMAIN}/signout-callback-oidc
+      Sso__Clients__0__LaunchUrl: https://report.${CLINIC_DOMAIN}/
+      Sso__Clients__1__ClientId: labflow
+      Sso__Clients__1__DisplayName: LabFlow
+      Sso__Clients__1__RedirectUris__0: https://lab.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__1__PostLogoutRedirectUris__0: https://lab.${CLINIC_DOMAIN}/signout-callback-oidc
+      Sso__Clients__1__LaunchUrl: https://lab.${CLINIC_DOMAIN}/
+      Sso__Clients__2__ClientId: pharmaflow
+      Sso__Clients__2__DisplayName: PharmaFlow
+      Sso__Clients__2__RedirectUris__0: https://pharmacy.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__2__PostLogoutRedirectUris__0: https://pharmacy.${CLINIC_DOMAIN}/signout-callback-oidc
+      Sso__Clients__2__LaunchUrl: https://pharmacy.${CLINIC_DOMAIN}/
+      Sso__Clients__3__ClientId: finance
+      Sso__Clients__3__DisplayName: FinancePowerApp
+      Sso__Clients__3__RedirectUris__0: https://finance.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__3__PostLogoutRedirectUris__0: https://finance.${CLINIC_DOMAIN}/signout-callback-oidc
+      Sso__Clients__3__LaunchUrl: https://finance.${CLINIC_DOMAIN}/
+      # Browser applications: public clients (no secret) that call the token endpoint from their page.
+      Sso__Clients__4__ClientId: analytics
+      Sso__Clients__4__DisplayName: Analytics
+      Sso__Clients__4__RedirectUris__0: https://analytics.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__4__PostLogoutRedirectUris__0: https://analytics.${CLINIC_DOMAIN}/
+      Sso__Clients__4__LaunchUrl: https://analytics.${CLINIC_DOMAIN}/
+      Sso__Clients__4__CorsOrigins__0: https://analytics.${CLINIC_DOMAIN}
+      Sso__Clients__5__ClientId: integrationhub-admin
+      Sso__Clients__5__App: integrationhub
+      Sso__Clients__5__DisplayName: IntegrationHub
+      Sso__Clients__5__RedirectUris__0: https://integration.${CLINIC_DOMAIN}/signin-oidc
+      Sso__Clients__5__PostLogoutRedirectUris__0: https://integration.${CLINIC_DOMAIN}/
+      Sso__Clients__5__LaunchUrl: https://integration.${CLINIC_DOMAIN}/
+      Sso__Clients__5__CorsOrigins__0: https://integration.${CLINIC_DOMAIN}
+      Sso__Clients__6__ClientId: integrationhub
+      Sso__Clients__6__DisplayName: IntegrationHub (HL7 results)
+      # Orders, prescriptions and money go out through the hub (its routes), as with the PC's via-hub profile.
+      Integrations__LabFlow__FhirBaseUrl: http://integrationhub:5700/route/labflow/fhir
+      Integrations__ClinicReport__FhirBaseUrl: http://integrationhub:5700/route/clinicreport/fhir
+      Integrations__PharmaFlow__FhirBaseUrl: http://integrationhub:5700/route/pharmaflow/fhir
+      Integrations__Finance__BaseUrl: http://integrationhub:5700/route/finance
+    secrets:
+      - { source: clinichub-catalog-connection, target: ConnectionStrings__Catalog }
+      - { source: clinichub-server-connection, target: ConnectionStrings__ClinicServer }
+      - { source: clinichub-signing.pfx, target: /certs/signing.pfx }
+      - { source: clinichub-signing-password, target: Sso__SigningCertificatePassword }
+      - { source: clinicreport-client-secret, target: Sso__Clients__0__ClientSecret }
+      - { source: labflow-client-secret, target: Sso__Clients__1__ClientSecret }
+      - { source: pharmaflow-client-secret, target: Sso__Clients__2__ClientSecret }
+      - { source: finance-client-secret, target: Sso__Clients__3__ClientSecret }
+      - { source: integrationhub-client-secret, target: Sso__Clients__6__ClientSecret }
+    volumes:
+      - clinichub-keys:/keys
+    restart: unless-stopped
+    healthcheck: *healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: clinichub
+      controlpanel.display: "ClinicHub"
+
+  # ------------------------------------------------- ClinicReport, connected --
+  # A second ClinicReport: signed in through ClinicHub, one SQLite database per clinic in its own volume. The
+  # `clinicreport` service stays the public standalone demo at report.<domain>.
+  clinicreport-clinic:
+    build:
+      context: ${CLINICREPORT_DIR:-/srv/portfolio/ClinicReport}
+    environment:
+      <<: *dotnet
+      Demo__Enabled: "false"
+      ClinicHub__Authority: https://hub.${CLINIC_DOMAIN}/
+      ClinicHub__PublicUrl: https://report.${CLINIC_DOMAIN}/
+      ClinicHub__FinanceUrl: http://integrationhub:5700/route/finance
+      ClinicHub__ResultsUrl: http://integrationhub:5700/route/clinichub/fhir
+    secrets:
+      - { source: clinicreport-client-secret, target: ClinicHub__ClientSecret }
+    volumes:
+      - clinicreport-clinic-data:/data
+    restart: unless-stopped
+    healthcheck: *healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: clinicreport-clinic
+      controlpanel.display: "ClinicReport (clinic)"
+
+  # ----------------------------------------------------------------- LabFlow --
+  # The portfolio's LabFlow becomes the clinic's lab: Production, signed in through ClinicHub, one lab database.
+  labflow-api:
+    environment:
+      <<: *dotnet
+      ClinicHub__Authority: https://hub.${CLINIC_DOMAIN}/
+      ClinicHub__FinanceUrl: http://integrationhub:5700/route/finance
+      ClinicHub__ResultsUrl: http://integrationhub:5700/route/clinichub/fhir
+    secrets:
+      # Wins over the ConnectionStrings__LabFlow variable of the layers below (files are read last).
+      - { source: labflow-connection, target: ConnectionStrings__LabFlow }
+      - { source: labflow-client-secret, target: ClinicHub__ClientSecret }
+    volumes:
+      # Data Protection keys (the sign-in cookie): kept across restarts and deploys.
+      - labflow-keys:/home/app/.aspnet/DataProtection-Keys
+
+  # -------------------------------------------------------------- PharmaFlow --
+  pharmaflow-api:
+    build:
+      context: ${PHARMAFLOW_DIR:-/srv/portfolio/PharmaFlow}
+      dockerfile: ${DEPLOY_DIR}/clinic/api.Dockerfile
+      args:
+        APP: PharmaFlow
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      <<: *dotnet
+      ClinicHub__Authority: https://hub.${CLINIC_DOMAIN}/
+      Finance__BaseUrl: http://integrationhub:5700/route/finance
+    secrets:
+      - { source: pharmaflow-connection, target: ConnectionStrings__PharmaFlow }
+      - { source: pharmaflow-client-secret, target: ClinicHub__ClientSecret }
+    volumes:
+      - pharmaflow-keys:/home/app/.aspnet/DataProtection-Keys
+    restart: unless-stopped
+    healthcheck: *healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: pharmaflow-api
+      controlpanel.display: "PharmaFlow API"
+
+  pharmaflow-web:
+    build:
+      context: ${PHARMAFLOW_DIR:-/srv/portfolio/PharmaFlow}
+      dockerfile: ${DEPLOY_DIR}/clinic/web.Dockerfile
+      additional_contexts:
+        deploy: ./deploy/clinic
+    restart: unless-stopped
+    healthcheck: *web-healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: pharmaflow-web
+      controlpanel.display: "PharmaFlow web"
+
+  # --------------------------------------------------------- FinancePowerApp --
+  finance-api:
+    build:
+      context: ${FINANCE_DIR:-/srv/portfolio/FinancePowerApp}
+      dockerfile: ${DEPLOY_DIR}/clinic/api.Dockerfile
+      args:
+        APP: FinancePowerApp
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      <<: *dotnet
+      ClinicHub__Authority: https://hub.${CLINIC_DOMAIN}/
+    secrets:
+      - { source: finance-connection, target: ConnectionStrings__Finance }
+      - { source: finance-client-secret, target: ClinicHub__ClientSecret }
+    volumes:
+      - finance-keys:/home/app/.aspnet/DataProtection-Keys
+    restart: unless-stopped
+    healthcheck: *healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: finance-api
+      controlpanel.display: "FinancePowerApp API"
+
+  finance-web:
+    build:
+      context: ${FINANCE_DIR:-/srv/portfolio/FinancePowerApp}
+      dockerfile: ${DEPLOY_DIR}/clinic/web.Dockerfile
+      additional_contexts:
+        deploy: ./deploy/clinic
+    restart: unless-stopped
+    healthcheck: *web-healthz
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: finance-web
+      controlpanel.display: "FinancePowerApp web"
+
+  # --------------------------------------------------------------- Analytics --
+  # Local-only in compose.vps.yml; here with the platform's ClinicHub and the books' read-only login.
+  analytics-api:
+    profiles: !reset []
+    environment: !override
+      <<: *analytics-env
+    secrets: *analytics-secrets
+  analytics-scheduler:
+    profiles: !reset []
+    environment: !override
+      <<: *analytics-env
+    secrets: *analytics-secrets
+  analytics-consumer:
+    profiles: !reset []
+    depends_on:
+      integrationhub-mq:
+        condition: service_healthy
+    environment: !override
+      <<: *analytics-env
+    secrets: *analytics-secrets
+  analytics-web:
+    profiles: !reset []
+    build:
+      args:
+        VITE_OIDC_AUTHORITY: https://hub.${CLINIC_DOMAIN}/
+    ports: !reset []
+
+  # ---------------------------------------------------------- IntegrationHub --
+  integrationhub-db:
+    profiles: !reset []
+    environment: !override
+      POSTGRES_DB: integrationhub
+      POSTGRES_USER: integrationhub
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - { source: hub-db-password, target: postgres-password }
+
+  integrationhub-mq:
+    profiles: !reset []
+    ports: !reset []
+    secrets:
+      # Its own account (integrationhub); Analytics' is added by migrate.sh. No guest from other containers.
+      - { source: rabbitmq-defaults.conf, target: /etc/rabbitmq/conf.d/10-defaults.conf }
+
+  integrationhub:
+    profiles: !reset []
+    ports: !reset []
+    environment: !override
+      TZ: America/Toronto
+      HUB_DB_URL: jdbc:postgresql://integrationhub-db:5432/integrationhub
+      HUB_RABBITMQ_HOST: integrationhub-mq
+      HUB_RABBITMQ_USER: integrationhub
+      # Secrets are files in /run/secrets named like the placeholders of application.yml (HUB_DB_PASSWORD ...).
+      SPRING_CONFIG_IMPORT: "optional:configtree:/run/secrets/"
+      HUB_AUTH_ISSUER: https://hub.${CLINIC_DOMAIN}/
+      # Over HTTPS through Caddy's alias: OpenIddict refuses plain HTTP to its endpoints outside development.
+      HUB_AUTH_JWKS_URI: https://hub.${CLINIC_DOMAIN}/.well-known/jwks
+      HUB_ROUTE_CLINICHUB_UPSTREAM: http://clinichub:8080
+      HUB_ROUTE_LABFLOW_UPSTREAM: http://labflow-api:8080
+      HUB_ROUTE_CLINICREPORT_UPSTREAM: http://clinicreport-clinic:8080
+      HUB_ROUTE_PHARMAFLOW_UPSTREAM: http://pharmaflow-api:8080
+      HUB_ROUTE_FINANCE_UPSTREAM: http://finance-api:8080
+      # Tokens only: no development key header is passed to FinancePowerApp.
+      HUB_ROUTE_FINANCE_API_KEY_HEADER: ""
+      HUB_ADMIN_CORS_ORIGINS: https://integration.${CLINIC_DOMAIN}
+      HUB_EVENTS_ENABLED: "true"
+      # No lab or OLIS to talk to from here: HL7 stays off (its ports would have to be published).
+      HUB_HL7_ENABLED: "false"
+      HUB_ALERTS_WEBHOOK_URL: ${INTEGRATIONHUB_ALERTS_WEBHOOK_URL:-}
+    secrets:
+      - { source: hub-db-password, target: HUB_DB_PASSWORD }
+      - { source: hub-rabbitmq-password, target: HUB_RABBITMQ_PASSWORD }
+      - { source: hub-events-pseudonym-secret, target: HUB_EVENTS_PSEUDONYM_SECRET }
+      - { source: integrationhub-client-secret, target: HUB_CLINICHUB_CLIENT_SECRET }
+
+  integrationhub-web:
+    profiles: !reset []
+    build:
+      args:
+        VITE_OIDC_AUTHORITY: https://hub.${CLINIC_DOMAIN}/
+    ports: !reset []
+
+secrets:
+  clinichub-catalog-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/clinichub-catalog-connection" }
+  clinichub-server-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/clinichub-server-connection" }
+  clinichub-signing.pfx: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/clinichub-signing.pfx" }
+  clinichub-signing-password: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/clinichub-signing-password" }
+  clinicreport-client-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/clinicreport-client-secret" }
+  labflow-client-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/labflow-client-secret" }
+  pharmaflow-client-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/pharmaflow-client-secret" }
+  finance-client-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/finance-client-secret" }
+  integrationhub-client-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/integrationhub-client-secret" }
+  labflow-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/labflow-connection" }
+  pharmaflow-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/pharmaflow-connection" }
+  finance-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/finance-connection" }
+  analytics-finance-connection: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/analytics-finance-connection" }
+  analytics-rabbitmq-url: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/analytics-rabbitmq-url" }
+  hub-db-password: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/hub-db-password" }
+  hub-rabbitmq-password: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/hub-rabbitmq-password" }
+  hub-events-pseudonym-secret: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/hub-events-pseudonym-secret" }
+  rabbitmq-defaults.conf: { file: "${CLINIC_SECRETS_DIR:-/srv/secrets/clinic}/rabbitmq-defaults.conf" }
+
+volumes:
+  clinichub-keys:
+  clinicreport-clinic-data:
+  # Only sign-in cookies depend on these (lost: people sign in again), so they are not in the backups.
+  labflow-keys:
+  pharmaflow-keys:
+  finance-keys:

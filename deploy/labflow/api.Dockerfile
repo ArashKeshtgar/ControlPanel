@@ -14,6 +14,9 @@ RUN dotnet publish src/LabFlow.Api/LabFlow.Api.csproj -c Release -o /out --no-re
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /out .
+# ASP.NET's own place for the Data Protection keys (the ClinicHub sign-in cookie), made here so a volume mounted on
+# it belongs to the app user (compose.clinic.yml mounts one): without it, every restart signs everyone out.
+RUN mkdir -p /home/app/.aspnet/DataProtection-Keys && chown -R app:app /home/app/.aspnet
 ENV ASPNETCORE_URLS=http://+:8080
 USER app
 EXPOSE 8080

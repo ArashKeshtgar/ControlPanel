@@ -11,9 +11,10 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
                          ├─ english.<domain>   -> lessons-web (static) + lessons-sync   public (sync needs its key)
                          ├─ ctx.<domain>       -> lessons-web + context.json (file)     basic auth
                          ├─ report.<domain>    -> clinicreport (.NET + React, SQLite)   public demo
-                         ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth
-                         └─ ledger.<domain>    -> ledgerdashboard                        basic auth
-             SQL Server (Express), MongoDB, core-api, adapters: no published ports
+                         ├─ labflow.<domain>   -> labflow-web -> labflow-api            basic auth (clinic: -> lab.clinic.<domain>)
+                         ├─ ledger.<domain>    -> ledgerdashboard                        basic auth
+                         └─ *.clinic.<domain>  -> the clinic platform (section 9)        ClinicHub sign-in
+             SQL Server (Express), MongoDB, PostgreSQL, RabbitMQ, core-api, adapters: no published ports
 ```
 
 | File | Where it runs | What it does |
@@ -27,7 +28,17 @@ internet ──443──> Caddy ─┬─ panel.<domain>     -> frontend (nginx,
 | `restore-db.sh` | server | restores `.bak` files and recreates the app logins |
 | `deploy.sh` | server | pull all repos, rebuild, wait for health |
 | `push-context.ps1` | Windows PC | context engine export -> `/srv/portfolio/context` for ctx.<domain> |
-| `backup.sh` | server, nightly | SQL + Mongo + uploads, 14 days kept |
+| `backup.sh` | server, nightly | SQL + Mongo + PostgreSQL + volumes, 14 days kept, then `backup-offsite.sh` |
+| `backup-offsite.sh` | server, nightly | the night's backup and the secrets to object storage, encrypted (restic) |
+| `restore-test.sh` | server, monthly | restores the latest off-server copy into scratch databases and checks them |
+| `watchdog.sh` | server, every 5 min | containers, disk, memory, certificates, last backup -> healthchecks.io |
+| `notify.sh` | (sourced) | the healthchecks.io pings of the three jobs above |
+| `install-jobs.sh` | server | puts those jobs in the deploy user's crontab |
+| `compose.clinic.yml` | server | the clinic platform over the VPS layer (section 9) |
+| `make-clinic-secrets.sh` | server | the clinic platform's secrets, one file each, in `/srv/secrets/clinic` |
+| `migrate.sh` | server, each release | schema scripts; with the clinic platform also its databases, logins and RabbitMQ accounts |
+| `labflow.caddy` | server (caddy container) | LabFlow's demo site; `../clinic/labflow.caddy` replaces it with the clinic platform |
+| `../clinic/` | build + caddy | Dockerfiles, nginx and Caddy sites, SQL logins of the clinic platform |
 | `../../.github/workflows/deploy-vps.yml` | GitHub Actions | runs `deploy.sh` after CI passes on main |
 
 ## 1. Server
@@ -155,22 +166,130 @@ In the ControlPanel repo on GitHub, Settings -> Secrets and variables -> Actions
 A push to ControlPanel's main deploys after CI passes. After pushing one of
 the other repos, run the workflow by hand (Actions -> Deploy to VPS -> Run).
 
-## 8. Backups
+## 8. Backups and scheduled jobs
 
 ```bash
-crontab -e
-# add:
-30 3 * * * /srv/portfolio/ControlPanel/deploy/vps/backup.sh >> /srv/backups/backup.log 2>&1
+deploy/vps/install-jobs.sh
 ```
 
-Run it once by hand and look in `/srv/backups/daily/`. Restoring a nightly
-database: `deploy/vps/restore-db.sh /srv/backups/daily/<stamp>/LabFlow.bak.gz`.
+puts four jobs in the deploy user's crontab (server time, UTC): `backup.sh` nightly at 03:30, `restore-test.sh` on
+the 1st of each month at 05:00, `watchdog.sh` every 5 minutes, and a weekly trim of their logs in `/srv/backups`.
+Run `backup.sh` once by hand and look in `/srv/backups/daily/`. Restoring a nightly database:
+`deploy/vps/restore-db.sh /srv/backups/daily/<stamp>/LabFlow.bak.gz` (the clinic databases too: their logins and
+owners are made again).
 
-**Off-server copy:** these backups die with the server. At minimum, pull them
-to the PC now and then:
-`scp -r deploy@<server-ip>:/srv/backups/daily .\vps-backups`.
-The provider's own snapshot/backup option (usually ~20% of the server price)
-is the easy upgrade.
+What a night's folder holds: every SQL Server database (ClinicHub's catalog and one per clinic are found by name),
+ReBiomed's MongoDB, IntegrationHub's PostgreSQL (`pg_dump`), and the volumes that can't be rebuilt: uploads, the
+lessons' sync data, ClinicHub's Data Protection keys (without them two-factor secrets and clinic connection strings
+can't be read), the connected ClinicReport's databases and Analytics' warehouse with its finance extracts.
+
+### Off-server backups
+
+The local copies die with the server, so `backup-offsite.sh` sends each night's folder and `/srv/secrets` (not
+`/srv/secrets/backup`) to object storage with [restic](https://restic.net), run from its container: encrypted on the
+server before it leaves (AES-256), deduplicated, thinned to 14 daily, 8 weekly and 12 monthly snapshots. Until it is
+configured, backup.sh says so every night and healthchecks.io's `backup-offsite` check stays failed.
+
+1. OVH Control Panel -> Public Cloud -> Object Storage -> create a container (S3 API, region **BHS**, Beauharnois:
+   the data stays in Canada), and an S3 user with read/write on it. Under 1 GB here: a few cents a month.
+2. On the server, as deploy (`umask 077` first, so the file is born mode 600):
+
+   ```bash
+   umask 077; mkdir -p /srv/secrets/backup
+   cat > /srv/secrets/backup/restic.env <<'EOF'
+   RESTIC_REPOSITORY=s3:https://s3.bhs.io.cloud.ovh.net/<container>
+   RESTIC_PASSWORD=<openssl rand -base64 48>
+   AWS_ACCESS_KEY_ID=<the S3 user's access key>
+   AWS_SECRET_ACCESS_KEY=<its secret key>
+   AWS_DEFAULT_REGION=bhs
+   EOF
+   ```
+
+3. **Put RESTIC_PASSWORD in the password manager now.** The copies can't be read without it, and the copy on the
+   server goes with the server.
+4. `deploy/vps/backup.sh` by hand, then `deploy/vps/restore-test.sh`: it checks the repository, restores the latest
+   snapshot into a scratch folder, restores every database as `RestoreTest_<name>`, runs `DBCC CHECKDB`, drops it
+   again, reads the PostgreSQL dump and every archive. It runs by itself on the 1st of each month.
+
+Another provider only changes `RESTIC_REPOSITORY` (any S3, B2, `sftp:`). For real patient data it has to stay in
+Canada, as BHS does.
+
+## 9. The clinic platform
+
+ClinicHub, ClinicReport (connected), LabFlow, PharmaFlow, FinancePowerApp, IntegrationHub and Analytics, as in the
+PC's `via-hub` profiles but in Production: every application signs people in through ClinicHub, with real accounts,
+no demo users and no development keys, and they talk to each other through the hub. Layered over the VPS layer by
+[`compose.clinic.yml`](compose.clinic.yml).
+
+```
+*.clinic.<domain> ──> Caddy ─┬─ hub.          -> clinichub (pages + API + OpenID Connect issuer)
+                             ├─ report.       -> clinicreport-clinic (SQLite per clinic)
+                             ├─ lab.          -> labflow-web, /api /signin-oidc -> labflow-api
+                             ├─ pharmacy.     -> pharmaflow-web, /api /signin-oidc -> pharmaflow-api
+                             ├─ finance.      -> finance-web, /api /signin-oidc -> finance-api
+                             ├─ analytics.    -> analytics-web -> analytics-api (+ scheduler, consumer)
+                             └─ integration.  -> integrationhub-web -> integrationhub
+      orders, results, prescriptions, money: app -> integrationhub:5700/route/... -> app   (inside Docker only)
+      SQL Server: ClinicHub_Catalog, ClinicHub_<clinic>, LabFlow, PharmaFlow, FinancePowerApp
+      PostgreSQL + RabbitMQ: the hub's message log and the de-identified events for Analytics
+```
+
+> **Synthetic data only.** This is the production setup, but no real patient may be entered before the privacy
+> impact assessment, the agreements with the clinics, and a security review. HL7 to a lab and OLIS stay off.
+
+**Secrets** are files, not `.env` lines: `make-clinic-secrets.sh` generates every password, client secret and key on
+the server into `/srv/secrets/clinic` (folder mode 700, owned by deploy), and each container gets only its own,
+where its framework reads them: `/run/secrets/<setting>` for .NET (`AddKeyPerFile`), Python (pydantic `secrets_dir`)
+and Spring (`configtree:`), a file path for PostgreSQL, RabbitMQ and ClinicHub's token signing certificate. One file
+can reach two containers under two names (an application's ClinicHub secret is `Sso__Clients__<n>__ClientSecret` in
+ClinicHub and `ClinicHub__ClientSecret` in the application). Rotating one: delete its file, run the script again,
+then `migrate.sh` (database passwords) and `docker compose up -d`.
+
+### Turning it on (once)
+
+1. **DNS** (OVH Control Panel, `arashkeshtgar.ca` zone): one record, `*.clinic` A `144.217.4.240`. Caddy then gets
+   a certificate for each of the seven names by itself.
+2. **The secrets folder** (a server bootstrapped before this needs it once): `sudo install -d -o deploy -g deploy -m 700 /srv/secrets`
+3. **.env**: add `deploy/vps/compose.clinic.yml` to `COMPOSE_FILE` and the clinic block from `.env.vps.example`
+   (`CLINIC_DOMAIN=clinic.arashkeshtgar.ca` and the repo folders).
+4. As deploy:
+
+   ```bash
+   cd /srv/portfolio/ControlPanel
+   git pull --ff-only
+   deploy/vps/make-clinic-secrets.sh
+   deploy/vps/deploy.sh                 # clones the five repos, makes the databases and logins, builds, starts
+   docker compose run --rm clinichub seed-demo
+   docker compose run --rm clinichub admin arash "Arash Keshtgar" harbourview lakeshore
+   ```
+
+   `seed-demo` adds the two fictional clinics with synthetic patients; their staff accounts get random passwords
+   nobody knows. `admin` prints a temporary password: sign in at `https://hub.clinic.<domain>`, change it, turn on
+   two-factor, then create the people you want under Users (each gets a temporary password too). Run `admin` again
+   whenever the password is lost: it resets it.
+
+LabFlow becomes the clinic's lab: `labflow.<domain>` redirects to `lab.clinic.<domain>`, its basic auth goes, and
+people sign in through ClinicHub (Lab technologist, Front desk, Nurse roles). The public ClinicReport demo at
+`report.<domain>` stays as it is.
+
+## 10. Monitoring
+
+[healthchecks.io](https://healthchecks.io) watches from outside (free for up to 20 checks): each job pings it, and it
+alerts by e-mail when a job reports a failure **or when the pings stop** (the server down, Docker stopped, cron
+broken), which no check on the server itself can notice.
+
+1. Create an account and a project; under Settings, create a **ping key**.
+2. On the server: `umask 077; echo 'HC_PING_KEY=<key>' > /srv/secrets/monitoring.env`
+3. `deploy/vps/watchdog.sh` by hand. The first ping of each job creates its check (`watchdog`, `backup`,
+   `backup-offsite`, `restore-test`). In healthchecks.io set their schedules: watchdog every **5 minutes**, grace
+   **10 minutes**; backup and backup-offsite daily, grace 2 hours; restore-test monthly (cron `0 5 1 * *`), grace 1 day.
+
+`watchdog.sh` reports a failure, with what is wrong, when a container is unhealthy, restarting or exited with an
+error; when `/` is 85% full or under 300 MB of memory is free; when a site's certificate has under 14 days left
+(Caddy renews at 30, so that means renewal is failing); or when the last local backup is over 26 hours old.
+
+For a view from outside of the sites themselves, add HTTP monitors (UptimeRobot's free plan, or healthchecks.io's
+paid one) for `https://hub.clinic.<domain>/healthz` and the public sites.
 
 ## Day to day
 
@@ -189,8 +308,13 @@ is the easy upgrade.
   `compose.vps.yml` removes them with `!reset` (Compose 2.24+).
 - **SQL Server Express.** Developer edition isn't licensed for anything the
   public can reach. Express caps a database at 10 GB, far above what's here.
-- **Basic auth on LabFlow and LedgerDashboard.** LabFlow runs as Development,
-  where its demo sign-in is a role switcher with no password; LedgerDashboard
-  holds the job search. Both are for the owner, and whoever gets the password.
+- **Basic auth on LabFlow and LedgerDashboard.** Without the clinic platform
+  LabFlow runs as Development, where its demo sign-in is a role switcher with no
+  password; LedgerDashboard holds the job search. Both are for the owner, and
+  whoever gets the password. With the clinic platform LabFlow signs in through
+  ClinicHub instead and needs no basic auth.
+- **The clinic platform's containers reach Caddy under the public names**
+  (network aliases), so a token's issuer, `https://hub.clinic.<domain>/`, is the
+  same address inside Docker and in the browser, without leaving the server.
 - **Control Panel is public** with its own login. Give people the viewer
   account; only Admin can start and stop services.

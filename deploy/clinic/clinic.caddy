@@ -1,0 +1,52 @@
+# The clinic platform, imported by the Caddyfile when compose.clinic.yml mounts this file. Every name is under
+# {$CLINIC_DOMAIN} (one wildcard DNS record, *.clinic -> this server); Caddy still gets one certificate per name.
+# No basic auth: every application signs people in through ClinicHub (real accounts, two-factor). Synthetic data only.
+
+# The applications whose React app is a separate container: the API's own paths go to the API, the rest to the page.
+(app) {
+	@api path /api/* /signin-oidc /signout-callback-oidc
+	handle @api {
+		reverse_proxy {args[0]}
+	}
+	handle {
+		reverse_proxy {args[1]}
+	}
+}
+
+# ClinicHub: the sign-in (issuer https://hub.{$CLINIC_DOMAIN}/) and the clinics' own work; pages and API in one container.
+hub.{$CLINIC_DOMAIN} {
+	import common
+	reverse_proxy clinichub:8080
+}
+
+# ClinicReport connected to ClinicHub (its own database per clinic). report.<domain> stays the public demo.
+report.{$CLINIC_DOMAIN} {
+	import common
+	reverse_proxy clinicreport-clinic:8080
+}
+
+lab.{$CLINIC_DOMAIN} {
+	import common
+	import app labflow-api:8080 labflow-web:80
+}
+
+pharmacy.{$CLINIC_DOMAIN} {
+	import common
+	import app pharmaflow-api:8080 pharmaflow-web:80
+}
+
+finance.{$CLINIC_DOMAIN} {
+	import common
+	import app finance-api:8080 finance-web:80
+}
+
+# Analytics and the hub's admin web proxy /api themselves (their own nginx).
+analytics.{$CLINIC_DOMAIN} {
+	import common
+	reverse_proxy analytics-web:80
+}
+
+integration.{$CLINIC_DOMAIN} {
+	import common
+	reverse_proxy integrationhub-web:80
+}

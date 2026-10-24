@@ -1,0 +1,6 @@
+# With the clinic platform, LabFlow is the clinic's lab at lab.{$CLINIC_DOMAIN}; its old address sends people there.
+# compose.clinic.yml mounts this over deploy/vps/labflow.caddy (same path in the container).
+{$LABFLOW_DOMAIN} {
+	import common
+	redir https://lab.{$CLINIC_DOMAIN}{uri} permanent
+}

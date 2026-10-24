@@ -1,2 +1,4 @@
 *.sh text eol=lf
 deploy/vps/Caddyfile text eol=lf
+*.caddy text eol=lf
+deploy/clinic/*.conf text eol=lf

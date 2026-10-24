@@ -143,6 +143,8 @@ log "Folders"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" /srv/portfolio /srv/backups /srv/backups/import
 # SQL Server in its container runs as uid 10001 and writes backups here.
 install -d -o 10001 -g "$DEPLOY_USER" -m 775 /srv/backups/mssql
+# Secrets as files (the clinic platform's, the off-server backup's, the monitoring key): only deploy gets in.
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 700 /srv/secrets
 
 log "GitHub key for $DEPLOY_USER"
 KEY="/home/$DEPLOY_USER/.ssh/id_ed25519"

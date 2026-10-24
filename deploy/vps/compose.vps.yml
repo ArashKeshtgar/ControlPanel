@@ -37,6 +37,8 @@ services:
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in .env (caddy hash-password)}
     volumes:
       - ./deploy/vps/Caddyfile:/etc/caddy/Caddyfile:ro
+      # compose.clinic.yml mounts its own file at this path (LabFlow's old address sent to the clinic's lab).
+      - ./deploy/vps/labflow.caddy:/etc/caddy/sites/labflow.caddy:ro
       - caddy-data:/data
       - caddy-config:/config
       # context.json from push-context.ps1 (a folder, so the swap-in rename shows up)

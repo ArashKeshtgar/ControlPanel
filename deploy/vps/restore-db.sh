@@ -75,6 +75,20 @@ restore_one() {
       sql "USE [LabFlow]; DROP USER IF EXISTS labflow_svc;" >/dev/null
       run_sql_file deploy/labflow/sql-login.sql -v "LABFLOW_DB_PASSWORD=$(env_val LABFLOW_DB_PASSWORD .env)"
       ;;
+    # The clinic platform: migrate.sh makes the logins and users again (and Analytics' reader on the books).
+    PharmaFlow)
+      sql "USE [PharmaFlow]; DROP USER IF EXISTS pharmaflow_svc;" >/dev/null
+      clinic_logins=true
+      ;;
+    FinancePowerApp)
+      sql "USE [FinancePowerApp]; DROP USER IF EXISTS finance_svc; DROP USER IF EXISTS analytics_reader;" >/dev/null
+      clinic_logins=true
+      ;;
+    # ClinicHub's catalog and clinics: it owns them (it made them), and nothing else has a user there.
+    ClinicHub_*)
+      clinic_logins=true
+      clinichub_dbs+=("$db")
+      ;;
   esac
   echo "    restored"
 }
@@ -85,11 +99,21 @@ if [[ $# -gt 0 ]]; then files=("$@"); else
 fi
 [[ ${#files[@]} -gt 0 ]] || { echo "Nothing to restore in $BACKUPS/import/."; exit 1; }
 
+clinic_logins=false
+clinichub_dbs=()
 for f in "${files[@]}"; do restore_one "$f"; done
+
+if $clinic_logins; then
+  echo "==> clinic logins"
+  deploy/vps/migrate.sh >/dev/null
+  for db in "${clinichub_dbs[@]}"; do
+    sql "ALTER AUTHORIZATION ON DATABASE::[$db] TO clinichub_svc;" >/dev/null
+  done
+fi
 
 # Whatever was connected to the old copies reconnects to the new ones.
 running="$(docker compose ps --services --status running)"
-for svc in ledgerdashboard ledgerdash-adapter labflow-api; do
+for svc in ledgerdashboard ledgerdash-adapter labflow-api clinichub pharmaflow-api finance-api; do
   if grep -qx "$svc" <<<"$running"; then docker compose restart "$svc"; fi
 done
 echo "Done."

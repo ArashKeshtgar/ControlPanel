@@ -23,8 +23,8 @@
 	}
 }
 
-# Only the owner's eyes: LabFlow's demo sign-in has no password, and
-# LedgerDashboard holds the job search (companies, contacts).
+# Only the owner's eyes: LedgerDashboard holds the job search (companies,
+# contacts), and ctx.<domain> the owner's own reading.
 (private) {
 	basic_auth {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
@@ -90,14 +90,12 @@
 	reverse_proxy clinicreport:8080
 }
 
-{$LABFLOW_DOMAIN} {
-	import common
-	import private
-	reverse_proxy labflow-web:80
-}
-
 {$LEDGER_DOMAIN} {
 	import common
 	import private
 	reverse_proxy ledgerdashboard:4310
 }
+
+# Sites mounted by the compose layers: LabFlow (compose.vps.yml: the owner's demo, behind basic auth) and the clinic
+# platform (compose.clinic.yml: its sites, and LabFlow's old address sent to the clinic's lab).
+import /etc/caddy/sites/*.caddy
