@@ -215,18 +215,25 @@ else { & (Join-Path $PSScriptRoot 'push-context.ps1') -Server $Server -Domain $D
 Step '7/7 Smoke tests'
 # Public sites; labflow, ledger and ctx sit behind basic auth, so 401 is right.
 $expect = [ordered]@{ panel = 200; rebiomed = 200; english = 200; labflow = 401; ledger = 401; ctx = 401 }
+# With the clinic platform (as deploy.sh tells), labflow's old address redirects to
+# lab.clinic, and the clinic's own sites sign people in themselves.
+& $ssh $Server "grep -qE '^COMPOSE_FILE=.*compose\.clinic\.yml' $cp/.env"
+if ($LASTEXITCODE -eq 0) {
+    $expect.labflow = 301
+    foreach ($s in 'hub', 'report', 'lab', 'pharmacy', 'finance', 'analytics', 'integration') { $expect["$s.clinic"] = 200 }
+}
 $failed = @()
 foreach ($site in $expect.Keys) {
     $code = curl.exe -s -o NUL -w '%{http_code}' -m 20 "https://$site.$Domain/"
     $ok = [int]$code -eq $expect[$site]
-    Write-Host ("  {0,-9} {1}  {2}" -f $site, $code, $(if ($ok) { 'ok' } else { "expected $($expect[$site])" }))
+    Write-Host ("  {0,-18} {1}  {2}" -f $site, $code, $(if ($ok) { 'ok' } else { "expected $($expect[$site])" }))
     if (-not $ok) { $failed += $site }
 }
 # Review sync: health is open, the data needs the key.
 foreach ($c in @(@('/api/sync/health', 200), @('/api/sync', 401))) {
     $code = curl.exe -s -o NUL -w '%{http_code}' -m 20 "https://english.$Domain$($c[0])"
     $ok = [int]$code -eq $c[1]
-    Write-Host ("  {0,-9} {1}  {2}" -f "sync$($c[0].Substring(9))", $code, $(if ($ok) { 'ok' } else { "expected $($c[1])" }))
+    Write-Host ("  {0,-18} {1}  {2}" -f "sync$($c[0].Substring(9))", $code, $(if ($ok) { 'ok' } else { "expected $($c[1])" }))
     if (-not $ok) { $failed += "english$($c[0])" }
 }
 if ($failed) { throw "Released $tag, but these sites don't answer as expected: $($failed -join ', ')" }
