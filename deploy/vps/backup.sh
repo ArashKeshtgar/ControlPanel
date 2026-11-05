@@ -68,7 +68,8 @@ fi
 if grep -qx clinicreport-hosted <<<"$running"; then
   docker compose exec -T clinicreport-hosted rm -rf /data/backup-tonight
   docker compose exec -T clinicreport-hosted dotnet ClinicReport.Api.dll --backup-all /data/backup-tonight
-  docker compose exec -T clinicreport-hosted tar -czf - -C /data/backup-tonight . > "$OUT/clinicreport-hosted.tar.gz"
+  # With the Data Protection keys: without them the operators' two-factor secrets can't be read.
+  docker compose exec -T clinicreport-hosted tar -czf - -C /data backup-tonight keys > "$OUT/clinicreport-hosted.tar.gz"
   docker compose exec -T clinicreport-hosted rm -rf /data/backup-tonight
   echo "  clinicreport hosted ok"
 fi

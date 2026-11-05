@@ -341,3 +341,27 @@ paid one) for `https://hub.clinic.<domain>/healthz` and the public sites.
   same address inside Docker and in the browser, without leaving the server.
 - **Control Panel is public** with its own login. Give people the viewer
   account; only Admin can start and stop services.
+
+## Hosted ClinicReport
+
+Clinics sign themselves up at `clinicreport.<domain>`, each at its own subdomain with its own SQLite database. Billing
+is Stripe's test mode, the data is synthetic and every page says so. `compose.hosted.yml` is a separate layer, so nothing
+changes for a server without it.
+
+1. **DNS** (OVH, `arashkeshtgar.ca` zone): `clinicreport` and `*.clinicreport`, both A `144.217.4.240`.
+2. **On the server:** `deploy/vps/make-hosted-secrets.sh`, then in `.env` add `HOSTED_DOMAIN=clinicreport.<domain>` and
+   `deploy/vps/compose.hosted.yml` to `COMPOSE_FILE`. `deploy.sh` then builds and starts it.
+3. **An operator:** `docker compose exec clinicreport-hosted dotnet ClinicReport.Api.dll --add-operator <name>` prints a
+   password and a two-factor link once. The console is at `admin.clinicreport.<domain>`.
+4. **Billing, when wanted:** in Stripe's test mode add a webhook to `https://clinicreport.<domain>/api/billing/stripe` for
+   `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` and
+   `invoice.payment_failed`. Put the key, price and webhook secret in the three files in `/srv/secrets/hosted`, then
+   `docker compose up -d clinicreport-hosted`.
+
+Each address gets its own certificate at its first visit, after the app confirms it exists. `HOSTED_MAX_TENANTS` keeps
+sign-ups from spending the domain's Let's Encrypt limit, which every site here shares. There is no mail on this server,
+so sign-ups count as confirmed and past-due notices go unsent until `HOSTED_SMTP_HOST` is set.
+
+`backup.sh` copies the catalog, every clinic and the keys each night. To restore one clinic, see the data handling
+document in ClinicReport's `docs/`. `release.ps1` signs a test clinic up, uses it and removes it through real TLS
+(`smoke-hosted.sh`), which also fails the release if any clinic's database won't open.

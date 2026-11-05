@@ -32,6 +32,12 @@ if [[ -d "$LD" ]]; then
 fi
 
 # ---- The clinic platform (deploy/vps/compose.clinic.yml), when it is on.
+# The hosted ClinicReport: every clinic's database. A clinic also migrates at its first request; this finds failures now.
+if docker compose ps --services --status running 2>/dev/null | grep -qx clinicreport-hosted; then
+  echo "==> ClinicReport hosted  --migrate-all"
+  docker compose exec -T clinicreport-hosted dotnet ClinicReport.Api.dll --migrate-all
+fi
+
 if grep -qE '^COMPOSE_FILE=.*compose\.clinic\.yml' .env; then
   SECRETS="$(grep -E '^CLINIC_SECRETS_DIR=' .env | cut -d= -f2- || true)"
   SECRETS="${SECRETS:-/srv/secrets/clinic}"

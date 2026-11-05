@@ -1,0 +1,59 @@
+# ClinicReport's hosted, multi-tenant service: clinics sign themselves up, each at its own subdomain with its own SQLite
+# database, on Stripe's test mode. Synthetic data only. Add this file to COMPOSE_FILE in .env, set HOSTED_DOMAIN, and run
+# make-hosted-secrets.sh once. See "Hosted ClinicReport" in README.md.
+#
+# Two ClinicReports already run here: `clinicreport`, the public demo, and `clinicreport-clinic`, connected to ClinicHub.
+services:
+  clinicreport-hosted:
+    build:
+      context: ${CLINICREPORT_DIR:-/srv/portfolio/ClinicReport}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Caddy terminates TLS: the scheme and client address come from its X-Forwarded-* headers (cookies, Stripe's return links).
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      TZ: America/Toronto
+      Demo__Enabled: "false"
+      Hosting__Mode: Hosted
+      Hosting__BaseDomain: ${HOSTED_DOMAIN:?set HOSTED_DOMAIN in .env}
+      Hosting__CatalogConnection: Data Source=/data/catalog.db
+      Hosting__DatabasePattern: Data Source=/data/clinicreport-{clinic}.db
+      # No mail on this server: sign-ups count as confirmed. With SMTP set, turn this on.
+      Hosting__VerifyEmail: ${HOSTED_VERIFY_EMAIL:-false}
+      Mail__SmtpHost: ${HOSTED_SMTP_HOST:-}
+      Hosting__SyntheticDataOnly: "true"
+      # Every clinic takes a Let's Encrypt certificate, from the limit the whole domain shares.
+      Hosting__MaxTenants: ${HOSTED_MAX_TENANTS:-25}
+    secrets:
+      - { source: hosted-health-token, target: Health__Token }
+      - { source: hosted-stripe-secret-key, target: Stripe__SecretKey }
+      - { source: hosted-stripe-price, target: Stripe__ProPriceId }
+      - { source: hosted-stripe-webhook, target: Stripe__WebhookSecret }
+    volumes:
+      - clinicreport-hosted-data:/data
+    restart: unless-stopped
+    # The aspnet image has no curl or wget; bash can speak HTTP/1.0.
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+    labels:
+      controlpanel.managed: "true"
+      controlpanel.service: clinicreport-hosted
+      controlpanel.display: "ClinicReport (hosted)"
+
+  caddy:
+    environment:
+      HOSTED_DOMAIN: ${HOSTED_DOMAIN:?set HOSTED_DOMAIN in .env}
+    volumes:
+      - ./deploy/vps/hosted.caddy:/etc/caddy/sites/hosted.caddy:ro
+
+secrets:
+  hosted-health-token: { file: "${HOSTED_SECRETS_DIR:-/srv/secrets/hosted}/health-token" }
+  hosted-stripe-secret-key: { file: "${HOSTED_SECRETS_DIR:-/srv/secrets/hosted}/stripe-secret-key" }
+  hosted-stripe-price: { file: "${HOSTED_SECRETS_DIR:-/srv/secrets/hosted}/stripe-price" }
+  hosted-stripe-webhook: { file: "${HOSTED_SECRETS_DIR:-/srv/secrets/hosted}/stripe-webhook" }
+
+volumes:
+  clinicreport-hosted-data:

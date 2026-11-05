@@ -3,6 +3,10 @@
 # Values come from the caddy service's environment (compose.vps.yml).
 {
 	email {$ACME_EMAIL}
+	# Only for sites that ask for it (hosted.caddy): the app says whether an address is real.
+	on_demand_tls {
+		ask http://clinicreport-hosted:8080/healthz/tls-ask
+	}
 }
 
 (common) {

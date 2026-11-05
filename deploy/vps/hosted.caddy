@@ -1,0 +1,13 @@
+# ClinicReport's hosted service, mounted by compose.hosted.yml: the root is where clinics sign up, admin. the operator's
+# console, and every clinic has its own subdomain. Two DNS records, the name and *.name, both to this server. Each
+# address gets its own certificate at its first visit, once on_demand_tls's ask (the Caddyfile) confirms it exists.
+{$HOSTED_DOMAIN}, *.{$HOSTED_DOMAIN} {
+	import common
+	tls {
+		on_demand
+	}
+	# Plain health for uptime checks; what is behind it is for this server, not through here.
+	@internal path /healthz/*
+	respond @internal 404
+	reverse_proxy clinicreport-hosted:8080
+}

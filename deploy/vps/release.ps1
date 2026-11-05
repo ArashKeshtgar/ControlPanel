@@ -236,6 +236,12 @@ foreach ($c in @(@('/api/sync/health', 200), @('/api/sync', 401))) {
     Write-Host ("  {0,-18} {1}  {2}" -f "sync$($c[0].Substring(9))", $code, $(if ($ok) { 'ok' } else { "expected $($c[1])" }))
     if (-not $ok) { $failed += "english$($c[0])" }
 }
+# The hosted ClinicReport: a clinic signed up, used and removed again, through real TLS.
+& $ssh $Server "grep -qE '^COMPOSE_FILE=.*compose\.hosted\.yml' $cp/.env"
+if ($LASTEXITCODE -eq 0) {
+    & $ssh $Server "$cp/deploy/vps/smoke-hosted.sh"
+    if ($LASTEXITCODE -ne 0) { $failed += 'clinicreport-hosted' }
+}
 if ($failed) { throw "Released $tag, but these sites don't answer as expected: $($failed -join ', ')" }
 
 Write-Host "`nReleased $tag." -ForegroundColor Green
