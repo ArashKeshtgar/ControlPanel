@@ -63,6 +63,16 @@ if grep -qx integrationhub-db <<<"$running"; then
   echo "  integrationhub postgres ok"
 fi
 
+# The hosted ClinicReport (when it runs): the app copies its catalog and every clinic's database itself, with SQLite's
+# backup API, so a live database is never read half-way through a write. A clinic that fails fails the whole backup.
+if grep -qx clinicreport-hosted <<<"$running"; then
+  docker compose exec -T clinicreport-hosted rm -rf /data/backup-tonight
+  docker compose exec -T clinicreport-hosted dotnet ClinicReport.Api.dll --backup-all /data/backup-tonight
+  docker compose exec -T clinicreport-hosted tar -czf - -C /data/backup-tonight . > "$OUT/clinicreport-hosted.tar.gz"
+  docker compose exec -T clinicreport-hosted rm -rf /data/backup-tonight
+  echo "  clinicreport hosted ok"
+fi
+
 # Named volumes: uploaded listing photos and verification documents, the lessons' review progress and sync key;
 # ClinicHub's Data Protection keys (without them two-factor secrets and clinic connection strings can't be read),
 # the connected ClinicReport's databases, and Analytics' warehouse and finance extracts (its open-item history).
