@@ -344,16 +344,16 @@ paid one) for `https://hub.clinic.<domain>/healthz` and the public sites.
 
 ## Hosted ClinicReport
 
-Clinics sign themselves up at `clinicreport.<domain>`, each at its own subdomain with its own SQLite database. Billing
+Clinics sign themselves up at `reports.clinic.<domain>`, each at its own subdomain with its own SQLite database. Billing
 is Stripe's test mode, the data is synthetic and every page says so. `compose.hosted.yml` is a separate layer, so nothing
 changes for a server without it.
 
-1. **DNS** (OVH, `arashkeshtgar.ca` zone): `clinicreport` and `*.clinicreport`, both A `144.217.4.240`.
-2. **On the server:** `deploy/vps/make-hosted-secrets.sh`, then in `.env` add `HOSTED_DOMAIN=clinicreport.<domain>` and
+1. **DNS:** nothing to add. The `*.clinic` record also answers for deeper names, such as `north.reports.clinic.<domain>`.
+2. **On the server:** `deploy/vps/make-hosted-secrets.sh`, then in `.env` add `HOSTED_DOMAIN=reports.clinic.<domain>` and
    `deploy/vps/compose.hosted.yml` to `COMPOSE_FILE`. `deploy.sh` then builds and starts it.
 3. **An operator:** `docker compose exec clinicreport-hosted dotnet ClinicReport.Api.dll --add-operator <name>` prints a
-   password and a two-factor link once. The console is at `admin.clinicreport.<domain>`.
-4. **Billing, when wanted:** in Stripe's test mode add a webhook to `https://clinicreport.<domain>/api/billing/stripe` for
+   password and a two-factor link once. The console is at `admin.reports.clinic.<domain>`.
+4. **Billing, when wanted:** in Stripe's test mode add a webhook to `https://reports.clinic.<domain>/api/billing/stripe` for
    `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` and
    `invoice.payment_failed`. Put the key, price and webhook secret in the three files in `/srv/secrets/hosted`, then
    `docker compose up -d clinicreport-hosted`.

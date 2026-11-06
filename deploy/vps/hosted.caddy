@@ -1,5 +1,5 @@
 # ClinicReport's hosted service, mounted by compose.hosted.yml: the root is where clinics sign up, admin. the operator's
-# console, and every clinic has its own subdomain. Two DNS records, the name and *.name, both to this server. Each
+# console, and every clinic has its own subdomain. The name and *.name have to reach this server; under *.clinic they do. Each
 # address gets its own certificate at its first visit, once on_demand_tls's ask (the Caddyfile) confirms it exists.
 {$HOSTED_DOMAIN}, *.{$HOSTED_DOMAIN} {
 	import common
